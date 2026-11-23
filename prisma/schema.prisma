@@ -1,0 +1,631 @@
+// Tutera-X database schema (PostgreSQL, Prisma 6)
+//
+// Design rules:
+//  - No destructive deletes on business records. Students, batches and teachers are archived (archivedAt).
+//  - Money is a ledger: charges and payments are append-only; balances are derived, never stored as truth.
+//  - Results are immutable once published except via ExamResultRevision (audited).
+//  - Every SMS keeps Nishchit's two-axis status: what we did (status) and what the network reported (deliveryStatus).
+//  - Notification jobs are rows in Postgres, so they survive restarts. No in-memory queue.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum AccountStatus {
+  PENDING_ACTIVATION // student created, activation link not yet used
+  ACTIVE
+  DISABLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum ExamStatus {
+  SCHEDULED
+  RESULTS_DRAFT
+  RESULTS_PUBLISHED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BKASH
+  NAGAD
+  BANK_TRANSFER
+  OTHER
+}
+
+enum SmsPurpose {
+  ABSENCE_NOTICE
+  EXAM_ANNOUNCEMENT
+  RESULT_PUBLISHED
+  ACCOUNT_ACTIVATION
+  TEACHER_INVITATION
+  PASSWORD_RESET
+  BULK_MESSAGE
+  INDIVIDUAL_MESSAGE
+}
+
+// Our view of a send: what Tutera-X did.
+enum SmsStatus {
+  QUEUED      // stored, not yet submitted to Nishchit
+  SUBMITTING  // request in flight (claimed by a worker)
+  ACCEPTED    // Nishchit returned 201 "accepted"
+  SENT        // Nishchit reports status "sent" (handed to carrier)
+  FAILED      // terminal failure from Nishchit or our own validation
+  SKIPPED     // not sent: suppressed, invalid number, blocked by content policy
+  CANCELLED
+}
+
+// What the network reported, mirrored from Nishchit's delivery_status.
+// UNKNOWN is the normal terminal state on routes with no delivery reports.
+enum SmsDeliveryStatus {
+  UNKNOWN
+  DELIVERED
+  UNDELIVERED
+  REJECTED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED_RETRYABLE
+  FAILED_PERMANENT
+}
+
+enum TeacherRole {
+  OWNER      // the initial administrator; cannot be removed
+  TEACHER
+}
+
+// ---------------------------------------------------------------------------
+// Identity and access
+// ---------------------------------------------------------------------------
+
+model User {
+  id                 String        @id @default(cuid())
+  role               Role
+  email              String?       @unique
+  // Login identifier for student and parent accounts (for example S483920, P104553). Stored uppercase.
+  username           String?       @unique
+  // Normalised E.164 (+8801XXXXXXXXX). Used for login and SMS.
+  phoneE164          String?       @unique
+  name               String
+  passwordHash       String?       // Argon2id; null until activation for students
+  status             AccountStatus @default(ACTIVE)
+  failedLoginCount   Int           @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  deletedAt          DateTime?
+
+  teacherProfile     TeacherProfile?
+  studentProfile     StudentProfile?
+  parentProfile      ParentProfile?
+  sessions           Session[]
+  passwordResets     PasswordResetToken[]
+  activations        StudentActivation[]
+  auditEntries       AuditLog[]          @relation("AuditActor")
+
+  @@index([role, status])
+}
+
+model TeacherProfile {
+  userId          String      @id
+  user            User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role            TeacherRole @default(TEACHER)
+  institutionName String?
+  // Per-teacher SMS notification settings live here so they are versioned with the profile.
+  absenceSmsEnabled Boolean   @default(true)
+  // Per-teacher SMS allowance, in credits (1 credit = 1 segment). Separate from the shared Nishchit balance.
+  // Invariant: smsCreditsUsed + smsCreditsReserved <= smsAllowance, enforced by conditional SQL updates.
+  smsAllowance       Int      @default(0)
+  smsCreditsUsed     Int      @default(0)
+  smsCreditsReserved Int      @default(0)
+  allowanceEntries   SmsAllowanceEntry[]
+  createdAt       DateTime    @default(now())
+
+  invitationsSent TeacherInvitation[] @relation("InvitedBy")
+  students        TeacherStudent[]
+  batches         Batch[]
+  exams           Exam[]
+  payments        Payment[]
+  smsMessages     SmsMessage[]
+}
+
+model TeacherInvitation {
+  id            String    @id @default(cuid())
+  email         String
+  tokenHash     String    @unique          // SHA-256 of the raw token; raw token is never stored
+  invitedById   String
+  invitedBy     TeacherProfile @relation("InvitedBy", fields: [invitedById], references: [userId], onDelete: Restrict)
+  expiresAt     DateTime
+  acceptedAt    DateTime?                  // single use: set once, then the token is dead
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique           // SHA-256 of the session cookie value
+  csrfSecret  String
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  lastSeenAt  DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// Student account activation. Single use, short-lived, hashed at rest.
+model StudentActivation {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Students, guardians, parents
+// ---------------------------------------------------------------------------
+
+model StudentProfile {
+  userId          String    @id
+  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  // Student's own phone is optional; if absent, activation goes to the guardian.
+  className       String
+  institution     String
+  version         String    // Bangla / English medium etc., as the spec calls it
+  monthlyFee      Decimal   @db.Decimal(12, 2)
+  guardianId      String
+  guardian        Guardian  @relation(fields: [guardianId], references: [id], onDelete: Restrict)
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  teachers        TeacherStudent[]
+  batchMemberships BatchStudent[]
+  attendance      Attendance[]
+  examResults     ExamResult[]
+  charges         FeeCharge[]
+  payments        Payment[]
+  smsRecipients     SmsRecipient[]
+  adjustments     PaymentAdjustment[]
+
+  @@index([guardianId])
+  @@index([archivedAt])
+}
+
+// A guardian is identified by phone number. One phone = one Guardian row, however many children.
+model Guardian {
+  id          String    @id @default(cuid())
+  phoneE164   String    @unique
+  name        String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  students    StudentProfile[]
+  parentUser  ParentProfile?
+}
+
+// Parent login account. Linked to exactly one Guardian identity.
+model ParentProfile {
+  userId      String    @id
+  user        User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  guardianId  String    @unique
+  guardian    Guardian  @relation(fields: [guardianId], references: [id], onDelete: Restrict)
+  createdAt   DateTime  @default(now())
+}
+
+// Which teacher(s) manage a student. A student may be known to several teachers.
+model TeacherStudent {
+  teacherId   String
+  teacher     TeacherProfile @relation(fields: [teacherId], references: [userId], onDelete: Restrict)
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Restrict)
+  createdAt   DateTime       @default(now())
+
+  @@id([teacherId, studentId])
+  @@index([studentId])
+}
+
+// ---------------------------------------------------------------------------
+// Batches and schedules
+// ---------------------------------------------------------------------------
+
+model Batch {
+  id          String    @id @default(cuid())
+  teacherId   String
+  teacher     TeacherProfile @relation(fields: [teacherId], references: [userId], onDelete: Restrict)
+  name        String
+  className   String
+  subject     String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  members     BatchStudent[]
+  schedules   Schedule[]
+  attendance  Attendance[]
+  examBatches ExamBatch[]
+
+  @@unique([teacherId, name])
+  @@index([teacherId, archivedAt])
+}
+
+model BatchStudent {
+  batchId     String
+  batch       Batch          @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Restrict)
+  joinedAt    DateTime       @default(now())
+  leftAt      DateTime?      // leaving sets this; historical attendance and results remain
+
+  @@id([batchId, studentId])
+  @@index([studentId])
+}
+
+model Schedule {
+  id          String    @id @default(cuid())
+  batchId     String
+  batch       Batch     @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  weekday     Int       // 0 = Sunday ... 6 = Saturday
+  startMinute Int       // minutes from midnight, Asia/Dhaka
+  endMinute   Int
+  room        String?
+
+  @@index([batchId])
+}
+
+// ---------------------------------------------------------------------------
+// Attendance
+// ---------------------------------------------------------------------------
+
+// One row per student per batch per date. The unique key is the duplicate-prevention guarantee.
+model Attendance {
+  id            String           @id @default(cuid())
+  batchId       String
+  batch         Batch            @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  studentId     String
+  student       StudentProfile   @relation(fields: [studentId], references: [userId], onDelete: Restrict)
+  date          DateTime         @db.Date
+  status        AttendanceStatus
+  markedById    String
+  submittedAt   DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  version       Int              @default(1)
+
+  changes       AttendanceChangeLog[]
+
+  @@unique([batchId, studentId, date])
+  @@index([studentId, date])
+  @@index([batchId, date])
+}
+
+model AttendanceChangeLog {
+  id            String           @id @default(cuid())
+  attendanceId  String
+  attendance    Attendance       @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
+  previousStatus AttendanceStatus
+  newStatus     AttendanceStatus
+  changedById   String
+  reason        String?
+  // Absence SMS is only queued for a fresh ABSENT commit; this records whether a notice was already sent.
+  absenceNoticeSent Boolean      @default(false)
+  createdAt     DateTime         @default(now())
+
+  @@index([attendanceId])
+}
+
+// ---------------------------------------------------------------------------
+// Examinations and results
+// ---------------------------------------------------------------------------
+
+model Exam {
+  id           String     @id @default(cuid())
+  teacherId    String
+  teacher      TeacherProfile @relation(fields: [teacherId], references: [userId], onDelete: Restrict)
+  name         String
+  subject      String
+  examDate     DateTime   @db.Date
+  examTime     String     // "HH:mm" local time, Asia/Dhaka
+  totalMarks   Decimal    @db.Decimal(7, 2)
+  passMarks    Decimal?   @db.Decimal(7, 2)
+  instructions String?
+  status       ExamStatus @default(SCHEDULED)
+  resultsPublishedAt DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  batches      ExamBatch[]
+  results      ExamResult[]
+
+  @@index([teacherId, examDate])
+  @@index([status])
+}
+
+model ExamBatch {
+  examId   String
+  exam     Exam   @relation(fields: [examId], references: [id], onDelete: Restrict)
+  batchId  String
+  batch    Batch  @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  @@id([examId, batchId])
+  @@index([batchId])
+}
+
+model ExamResult {
+  id            String         @id @default(cuid())
+  examId        String
+  exam          Exam           @relation(fields: [examId], references: [id], onDelete: Restrict)
+  studentId     String
+  student       StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Restrict)
+  obtainedMarks Decimal        @db.Decimal(7, 2)
+  isAbsent      Boolean        @default(false)
+  // Snapshot of total marks at entry time so historical percentages never shift if the exam is edited.
+  totalMarksSnapshot Decimal   @db.Decimal(7, 2)
+  publishedAt   DateTime?
+  enteredById   String
+  version       Int            @default(1)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  revisions     ExamResultRevision[]
+
+  @@unique([examId, studentId])
+  @@index([studentId, publishedAt])
+}
+
+model ExamResultRevision {
+  id              String     @id @default(cuid())
+  examResultId    String
+  examResult      ExamResult @relation(fields: [examResultId], references: [id], onDelete: Restrict)
+  previousMarks   Decimal    @db.Decimal(7, 2)
+  newMarks        Decimal    @db.Decimal(7, 2)
+  changedById     String
+  reason          String
+  createdAt       DateTime   @default(now())
+
+  @@index([examResultId])
+}
+
+// ---------------------------------------------------------------------------
+// Fees and payments (ledger)
+// ---------------------------------------------------------------------------
+
+// A monthly charge. Created once per student per period; a unique key prevents double-billing.
+model FeeCharge {
+  id          String         @id @default(cuid())
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Restrict)
+  period      String         // "2026-11"
+  amountDue   Decimal        @db.Decimal(12, 2)
+  createdAt   DateTime       @default(now())
+
+  @@unique([studentId, period])
+  @@index([studentId])
+}
+
+model Payment {
+  id          String         @id @default(cuid())
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Restrict)
+  amount      Decimal        @db.Decimal(12, 2)
+  method      PaymentMethod
+  reference   String?        // receipt number or transaction id, when available
+  paidOn      DateTime       @db.Date
+  forPeriod   String?       // optional "2026-11" the payment is applied against
+  recordedById String
+  recordedBy  TeacherProfile @relation(fields: [recordedById], references: [userId], onDelete: Restrict)
+  note        String?
+  reversedById String?      @unique
+  createdAt   DateTime      @default(now())
+
+  @@index([studentId, paidOn])
+}
+
+// Corrections are signed entries, never edits to charges or payments.
+model PaymentAdjustment {
+  id          String         @id @default(cuid())
+  studentId   String
+  student     StudentProfile @relation(fields: [studentId], references: [userId], onDelete: Restrict)
+  amount      Decimal        @db.Decimal(12, 2) // positive increases balance owed, negative reduces it
+  reason      String
+  createdById String
+  createdAt   DateTime       @default(now())
+
+  @@index([studentId])
+}
+
+// ---------------------------------------------------------------------------
+// SMS: messages, recipients, Nishchit attempts, persistent jobs
+// ---------------------------------------------------------------------------
+
+// A logical communication: one absence notice, one exam announcement, one bulk send.
+model SmsMessage {
+  id            String      @id @default(cuid())
+  teacherId     String?     // null for platform-level messages such as admin notices
+  teacher       TeacherProfile? @relation(fields: [teacherId], references: [userId], onDelete: Restrict)
+  purpose       SmsPurpose
+  templateKey   String?
+  body          String      // rendered body as sent (Nishchit adds the account prefix in front)
+  encoding      String?     // "gsm7" | "ucs2", from Nishchit or our preview
+  segmentsEstimate Int?
+  // Dedupe key for the logical notice, e.g. "absence:{attendanceId}" or "exam:{examId}:announce".
+  // Unique, so the same notice is never created twice even under concurrent requests.
+  dedupeKey     String      @unique
+  createdAt     DateTime    @default(now())
+
+  recipients    SmsRecipient[]
+  @@index([teacherId, createdAt])
+}
+
+model SmsRecipient {
+  id                String      @id @default(cuid())
+  smsMessageId     String
+  smsMessage       SmsMessage  @relation(fields: [smsMessageId], references: [id], onDelete: Restrict)
+  phoneE164         String
+  // Rendered text for this recipient. Activation and reset links are redacted once the carrier accepts the message.
+  body              String
+  // The person this notice is about (student), so history can be shown per student.
+  studentId         String?
+  student           StudentProfile? @relation(fields: [studentId], references: [userId], onDelete: Restrict)
+  status            SmsStatus   @default(QUEUED)
+  deliveryStatus    SmsDeliveryStatus @default(UNKNOWN)
+  nishchitMessageId String?     @unique   // msg_... returned by POST /v1/messages
+  // Our idempotency key sent to Nishchit. Unique per recipient send, so retries never double-send.
+  idempotencyKey    String      @unique
+  segments          Int?
+  credits           Int?
+  // Credits held against the teacher's allowance for this recipient. Settled exactly once.
+  reservedCredits   Int         @default(0)
+  skipReason        String?     // e.g. "suppressed", "invalid_number", "content_rejected"
+  lastErrorCode     String?     // Nishchit error.code only; never message text or provider detail
+  lastRequestId     String?     // Nishchit request id for support
+  acceptedAt        DateTime?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  failedAt          DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  attempts          SmsDeliveryAttempt[]
+
+  @@index([smsMessageId])
+  @@index([status, createdAt])
+  @@index([studentId])
+}
+
+model SmsDeliveryAttempt {
+  id              String       @id @default(cuid())
+  smsRecipientId  String
+  smsRecipient    SmsRecipient @relation(fields: [smsRecipientId], references: [id], onDelete: Restrict)
+  attemptNumber   Int
+  httpStatus      Int?
+  errorCode       String?
+  retryable       Boolean?
+  requestId       String?
+  durationMs      Int?
+  createdAt       DateTime     @default(now())
+
+  @@unique([smsRecipientId, attemptNumber])
+}
+
+// Cached Nishchit balance. One row, refreshed on explicit request or when stale.
+model SmsBalanceSnapshot {
+  id           String    @id @default("singleton")
+  credits      Int
+  currency     String
+  nishchitAsOf DateTime
+  fetchedAt    DateTime
+  apiStatus    String    // "ok" | "unreachable" | "auth_failed"
+}
+
+// Persistent background job. Replaces any in-memory queue.
+model NotificationJob {
+  id           String    @id @default(cuid())
+  kind         String    // "send_sms_recipient" | "send_bulk" | "reconcile_delivery"
+  payload      Json
+  dedupeKey    String?   @unique
+  status       JobStatus @default(PENDING)
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(30) // quota waits count too; transient errors stop earlier in deliverRecipient
+  runAfter     DateTime  @default(now())
+  lockedUntil  DateTime?
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status, runAfter])
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  actorId     String?
+  actor       User?     @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action      String    // "student.create", "attendance.update", "payment.record", ...
+  entityType  String
+  entityId    String?
+  // Only non-sensitive before/after fields. Never passwords, tokens, or full phone numbers.
+  changes     Json?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+enum SmsAllowanceKind {
+  GRANT   // owner increased the allowance
+  ADJUST  // owner decreased the allowance
+  CONSUME // credits actually charged by Nishchit for an accepted message
+  RELEASE // reserved credits returned (message skipped, failed, or billed less)
+  OVERAGE // provider billed more than the reservation; the teacher is overdrawn until topped up
+}
+
+// Append-only record of every allowance movement. Sums reconcile with TeacherProfile counters.
+model SmsAllowanceEntry {
+  id              String            @id @default(cuid())
+  teacherId       String
+  teacher         TeacherProfile    @relation(fields: [teacherId], references: [userId], onDelete: Restrict)
+  kind            SmsAllowanceKind
+  credits         Int
+  smsRecipientId  String?
+  actorId         String?
+  note            String?
+  createdAt       DateTime          @default(now())
+
+  @@index([teacherId, createdAt])
+}
+

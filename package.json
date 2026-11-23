@@ -1,0 +1,42 @@
+{
+  "name": "tutera-x",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tutera-X: tutor management platform for teachers, students and parents",
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:verify": "bash scripts/verify-migration.sh",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:integration": "node --import tsx --test --test-concurrency=1 tests/integration/*.test.ts",
+    "owner:set-password": "node --env-file=.env --import tsx scripts/set-owner-password.ts",
+    "owner:check": "node --env-file=.env --import tsx scripts/check-owner.ts"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "@prisma/client": "^6.8.2",
+    "next": "15.5.29",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.4",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "postcss": "^8.5.3",
+    "prisma": "^6.8.2",
+    "tailwindcss": "^4.1.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.9"
+  }
+}
