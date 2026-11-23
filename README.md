@@ -22,7 +22,7 @@ cp .env.example .env          # set DATABASE_URL, APP_URL, the initial owner, an
 npm install
 npx prisma generate
 npx prisma migrate deploy     # applies prisma/migrations (use "migrate dev" while developing)
-npm run dev                   # http://localhost:3000
+npm run dev                   # http://tuterax.vercel.app
 ```
 
 On first start the owner account is created from `INITIAL_TEACHER_EMAIL` and `INITIAL_TEACHER_PASSWORD`. An existing account is never overwritten. Remove the password from `.env` after first sign-in.

@@ -10,7 +10,7 @@ describe("environment validation", () => {
     const env = parseEnv({ ...base });
     assert.equal(env.ALLOW_LIVE_SMS, false);
     assert.equal(env.JOB_RUNNER, "on");
-    assert.equal(env.APP_URL, "http://localhost:3000");
+    assert.equal(env.APP_URL, "http://tuterax.vercel.app");
     assert.equal(env.NISHCHIT_API_BASE_URL, "https://api.nishchit.tech");
   });
 
@@ -19,22 +19,53 @@ describe("environment validation", () => {
   });
 
   test("rejects an invalid switch value and names the variable", () => {
-    assert.throws(() => parseEnv({ ...base, ALLOW_LIVE_SMS: "yes please" }), /ALLOW_LIVE_SMS/);
-    assert.throws(() => parseEnv({ ...base, JOB_RUNNER: "maybe" }), /JOB_RUNNER/);
+    assert.throws(
+      () => parseEnv({ ...base, ALLOW_LIVE_SMS: "yes please" }),
+      /ALLOW_LIVE_SMS/,
+    );
+    assert.throws(
+      () => parseEnv({ ...base, JOB_RUNNER: "maybe" }),
+      /JOB_RUNNER/,
+    );
   });
 
   test("production requires an https APP_URL", () => {
-    assert.throws(() => parseEnv({ ...base, NODE_ENV: "production", APP_URL: "http://tutera.example" }), /https/);
-    assert.equal(parseEnv({ ...base, NODE_ENV: "production", APP_URL: "https://tutera.example" }).APP_URL, "https://tutera.example");
+    assert.throws(
+      () =>
+        parseEnv({
+          ...base,
+          NODE_ENV: "production",
+          APP_URL: "http://tutera.example",
+        }),
+      /https/,
+    );
+    assert.equal(
+      parseEnv({
+        ...base,
+        NODE_ENV: "production",
+        APP_URL: "https://tutera.example",
+      }).APP_URL,
+      "https://tutera.example",
+    );
   });
 
   test("validates the initial teacher email and password length", () => {
-    assert.throws(() => parseEnv({ ...base, INITIAL_TEACHER_EMAIL: "not-an-email" }), /INITIAL_TEACHER_EMAIL/);
-    assert.throws(() => parseEnv({ ...base, INITIAL_TEACHER_PASSWORD: "short" }), /INITIAL_TEACHER_PASSWORD/);
+    assert.throws(
+      () => parseEnv({ ...base, INITIAL_TEACHER_EMAIL: "not-an-email" }),
+      /INITIAL_TEACHER_EMAIL/,
+    );
+    assert.throws(
+      () => parseEnv({ ...base, INITIAL_TEACHER_PASSWORD: "short" }),
+      /INITIAL_TEACHER_PASSWORD/,
+    );
   });
 
   test("treats empty strings as unset", () => {
-    const env = parseEnv({ ...base, INITIAL_TEACHER_EMAIL: "", NISHCHIT_API_KEY: "" });
+    const env = parseEnv({
+      ...base,
+      INITIAL_TEACHER_EMAIL: "",
+      NISHCHIT_API_KEY: "",
+    });
     assert.equal(env.INITIAL_TEACHER_EMAIL, undefined);
     assert.equal(env.NISHCHIT_API_KEY, undefined);
   });
