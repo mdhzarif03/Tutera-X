@@ -166,14 +166,19 @@ export async function saveAttendanceAction(formData: FormData): Promise<void> {
   const date = requireText(str(formData, "date"), "Date", 10);
   return runAction(attendancePath(batchId, date), async () => {
     const raw = fieldsWithPrefix(formData, "s_");
-    const entries = Object.entries(raw).map(([studentId, status]) => ({
-      studentId,
-      status: attendance.parseStatus(status),
-    }));
-    const r = await attendance.saveAttendance(t.id, batchId, date, entries);
+    // "NONE" means "not marked": the day's record is removed so it can be marked again.
+    const clearIds = Object.entries(raw).filter(([, v]) => v === "NONE").map(([id]) => id);
+    const entries = Object.entries(raw)
+      .filter(([, v]) => v !== "NONE")
+      .map(([studentId, status]) => ({ studentId, status: attendance.parseStatus(status) }));
+    const removed = clearIds.length ? await attendance.clearAttendance(t.id, batchId, date, clearIds) : 0;
+    const r = entries.length
+      ? await attendance.saveAttendance(t.id, batchId, date, entries)
+      : { saved: 0, noticesQueued: 0, noticesSkipped: 0 };
     const notices = r.noticesQueued ? ` ${r.noticesQueued} absence notice${r.noticesQueued === 1 ? "" : "s"} queued.` : "";
     const skipped = r.noticesSkipped ? ` ${r.noticesSkipped} notice${r.noticesSkipped === 1 ? " was" : "s were"} not sent because the SMS allowance is used up.` : "";
-    return { message: `Attendance saved for ${r.saved} student${r.saved === 1 ? "" : "s"}.${notices}${skipped}` };
+    const cleared = removed ? ` ${removed} mark${removed === 1 ? " was" : "s were"} removed.` : "";
+    return { message: `Attendance saved for ${r.saved} student${r.saved === 1 ? "" : "s"}.${notices}${skipped}${cleared}` };
   });
 }
 
@@ -365,5 +370,14 @@ export async function checkSendCostAction(formData: FormData): Promise<void> {
     return {
       message: `Estimate for ${r.recipients} recipient${r.recipients === 1 ? "" : "s"}: ${q.creditsPerMessage} credit${q.creditsPerMessage === 1 ? "" : "s"} each, about ${q.totalCredits} in total. ${source}.`,
     };
+  });
+}
+
+export async function deleteStudentAction(formData: FormData): Promise<void> {
+  const t = await teacher();
+  const studentId = requireId(str(formData, "studentId"), "Student");
+  return runAction("/teacher/students", async () => {
+    const message = await students.deleteStudent(t.id, studentId);
+    return { message, redirectTo: "/teacher/students" };
   });
 }

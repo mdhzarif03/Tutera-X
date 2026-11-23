@@ -7,11 +7,13 @@ import {
   resendActivationAction,
   setStudentArchivedAction,
   updateStudentAction,
+  deleteStudentAction,
 } from "@/actions/teacher";
 import { getStudentDetail } from "@/services/students";
 import { studentLedger } from "@/services/payments";
 import { attendanceSummary } from "@/services/attendance";
 import { Badge, Card, Field, Flash, PageHeader } from "@/components/ui";
+import { ConfirmAction } from "@/components/confirm-action";
 import { formatDay, formatDateTime } from "@/lib/dates";
 import { formatTaka, num } from "@/lib/money";
 import { pick } from "@/lib/params";
@@ -204,6 +206,17 @@ export default async function StudentPage({
                   <input type="hidden" name="archived" value={isArchived ? "0" : "1"} />
                   <button className="btn btn-danger btn-sm" type="submit">{isArchived ? "Restore student" : "Archive student"}</button>
                 </form>
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <p className="mb-2 font-semibold text-slate-900">Delete</p>
+                  <p className="mb-3 text-slate-600">Removes the student for good when they have no attendance, fees, results or parent login. Otherwise they are archived.</p>
+                  <ConfirmAction
+                    action={deleteStudentAction}
+                    hidden={{ studentId: id }}
+                    label="Delete student"
+                    question={`Delete ${s.user.name}? This cannot be undone.`}
+                    confirmLabel="Yes, delete"
+                  />
+                </div>
               </div>
             </div>
           </Card>

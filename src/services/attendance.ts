@@ -161,3 +161,24 @@ export async function attendanceSummary(studentId: string, batchFilter?: { teach
   };
 }
 
+/**
+ * Removes attendance marks for the given students on one date, so the day can be marked again.
+ * Each removal is recorded in the audit log with the batch and date.
+ */
+export async function clearAttendance(teacherId: string, batchId: string, date: string, studentIds: string[]): Promise<number> {
+  await assertBatchOwned(teacherId, batchId);
+  const day = dateOnly(date);
+  return db.$transaction(async (tx) => {
+    let removed = 0;
+    for (const studentId of studentIds) {
+      const rec = await tx.attendance.findUnique({ where: { batchId_studentId_date: { batchId, studentId, date: day } } });
+      if (!rec) continue;
+      await tx.attendanceChangeLog.deleteMany({ where: { attendanceId: rec.id } });
+      await tx.attendance.delete({ where: { id: rec.id } });
+      removed++;
+    }
+    await audit(tx, { actorId: teacherId, action: "attendance.remove", entityType: "batch", entityId: batchId, changes: { date, count: removed } });
+    return removed;
+  });
+}
+

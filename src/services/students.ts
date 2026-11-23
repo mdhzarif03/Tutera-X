@@ -11,6 +11,7 @@ import { render, templates } from "@/lib/sms/templates";
 import { optionalText, requireNumber, requireText } from "@/lib/validate";
 import { assertBatchOwned, assertStudentOfTeacher } from "./scope";
 import { balancesFor } from "./payments";
+import { settleRecipientCredits } from "@/lib/sms/allowance";
 import type { Prisma } from "@prisma/client";
 
 export const PAGE_SIZE = 25;
@@ -366,4 +367,55 @@ export async function createParentLogin(teacherId: string, studentId: string): P
     throw err;
   }
   return { username };
+}
+
+/**
+ * Deletes a student when nothing depends on them. If they have attendance, fees, results, payments
+ * or a parent login, they are archived instead, so no history is lost. A student shared with another
+ * teacher is removed only from this teacher's classes. Queued messages release their allowance first.
+ */
+export async function deleteStudent(teacherId: string, studentId: string): Promise<string> {
+  await assertStudentOfTeacher(teacherId, studentId);
+
+  const [attendance, results, charges, payments, adjustments, profile, otherTeachers] = await Promise.all([
+    db.attendance.count({ where: { studentId } }),
+    db.examResult.count({ where: { studentId } }),
+    db.feeCharge.count({ where: { studentId } }),
+    db.payment.count({ where: { studentId } }),
+    db.paymentAdjustment.count({ where: { studentId } }),
+    db.studentProfile.findUniqueOrThrow({
+      where: { userId: studentId },
+      select: { guardian: { select: { parentUser: { select: { userId: true } } } } },
+    }),
+    db.teacherStudent.count({ where: { studentId, teacherId: { not: teacherId } } }),
+  ]);
+  const hasRecords = attendance + results + charges + payments + adjustments > 0 || Boolean(profile.guardian.parentUser);
+
+  if (hasRecords) {
+    await setStudentArchived(teacherId, studentId, true);
+    return "This student has records, so they were archived instead of deleted. Their history is kept.";
+  }
+
+  const permanent = otherTeachers === 0;
+  await db.$transaction(async (tx) => {
+    if (permanent) {
+      // Release any allowance still held by queued messages to this student, so it cannot leak.
+      const held = await tx.smsRecipient.findMany({ where: { studentId, reservedCredits: { gt: 0 } }, select: { id: true } });
+      for (const r of held) await settleRecipientCredits(tx, r.id, null);
+
+      await tx.batchStudent.deleteMany({ where: { studentId } });
+      await tx.teacherStudent.deleteMany({ where: { studentId } });
+      await tx.smsDeliveryAttempt.deleteMany({ where: { smsRecipient: { studentId } } });
+      await tx.smsRecipient.deleteMany({ where: { studentId } });
+      await tx.studentProfile.delete({ where: { userId: studentId } });
+      await tx.user.delete({ where: { id: studentId } });
+    } else {
+      await tx.batchStudent.deleteMany({ where: { studentId, batch: { teacherId } } });
+      await tx.teacherStudent.deleteMany({ where: { studentId, teacherId } });
+    }
+    await audit(tx, { actorId: teacherId, action: "student.delete", entityType: "student", entityId: studentId, changes: { permanent } });
+  });
+  return permanent
+    ? "Student deleted."
+    : "Removed from your classes. Other teachers still have this student.";
 }

@@ -181,3 +181,7 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Hides scrollbars while keeping horizontal swiping, for navigation rows. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
