@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Award, CalendarCheck, CalendarClock, GraduationCap, Layers, Wallet } from "lucide-react";
 import type { studentDashboard } from "@/services/dashboards";
 import { Badge, Bars, Card, EmptyState, Stat } from "./ui";
 import { formatDay } from "@/lib/dates";
@@ -6,9 +7,14 @@ import { formatTaka } from "@/lib/money";
 
 export type StudentDashboardData = Awaited<ReturnType<typeof studentDashboard>>;
 
-const STATUS: Record<string, string> = { PRESENT: "Present", ABSENT: "Absent", LATE: "Late", EXCUSED: "Excused" };
+const STATUS: Record<string, { label: string; tone: "good" | "bad" | "neutral" }> = {
+  PRESENT: { label: "Present", tone: "good" },
+  ABSENT: { label: "Absent", tone: "bad" },
+  LATE: { label: "Late", tone: "neutral" },
+  EXCUSED: { label: "Excused", tone: "neutral" },
+};
 
-/** Overview blocks shared by the student and parent dashboards. Strictly read-only. */
+/** Read-only overview shared by the student and parent dashboards. */
 export function DashboardOverview({ data, basePath }: { data: StudentDashboardData; basePath: string }) {
   const latest = data.performance[data.performance.length - 1];
   const balance = data.balance?.balance ?? 0;
@@ -19,87 +25,148 @@ export function DashboardOverview({ data, basePath }: { data: StudentDashboardDa
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="tx-stagger grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat
           label="Attendance"
+          icon={<CalendarCheck className="h-4 w-4" aria-hidden="true" />}
+          tone="good"
           value={data.attendance.percentage === null ? "—" : `${data.attendance.percentage}%`}
           hint={data.attendance.percentage === null ? "No days recorded yet" : `${data.attendance.counts.ABSENT} absent day${data.attendance.counts.ABSENT === 1 ? "" : "s"}`}
         />
-        <Stat label="Latest result" value={latest ? (latest.absent ? "Absent" : `${latest.percentage}%`) : "—"} hint={latest?.name} />
-        <Stat label="Upcoming exams" value={data.upcoming.length} />
-        <Stat label="Balance due" value={formatTaka(Math.max(0, balance))} hint={balance <= 0 ? "All paid up" : "Balance outstanding"} />
+        <Stat
+          label="Latest result"
+          icon={<Award className="h-4 w-4" aria-hidden="true" />}
+          tone="brand"
+          value={latest ? (latest.absent ? "Absent" : `${latest.percentage}%`) : "—"}
+          hint={latest?.name ?? "Published results appear here"}
+        />
+        <Stat
+          label="Upcoming exams"
+          icon={<GraduationCap className="h-4 w-4" aria-hidden="true" />}
+          tone="info"
+          value={data.upcoming.length}
+          hint={data.upcoming.length ? "Scheduled ahead" : "Nothing scheduled"}
+        />
+        <Stat
+          label="Balance due"
+          icon={<Wallet className="h-4 w-4" aria-hidden="true" />}
+          tone={balance > 0 ? "warn" : "good"}
+          value={formatTaka(Math.max(0, balance))}
+          hint={balance <= 0 ? "All paid up" : "Outstanding balance"}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card title="Performance" description="Percentage in recent published exams" className="lg:col-span-2">
+        <Card title="Performance" description="Percentage in recent published exams" className="lg:col-span-2" icon={<Award className="h-4 w-4" aria-hidden="true" />}>
           {chart.length === 0 ? (
-            <EmptyState title="No published results yet" body="When your teacher publishes results, your performance graph appears here." />
+            <EmptyState title="No published results yet" body="When results are published, the performance graph appears here." />
           ) : (
             <>
               <Bars items={chart} />
-              <div className="mt-4 -mx-4 overflow-x-auto sm:-mx-5">
+              <div className="-mx-5 mt-5 overflow-x-auto">
                 <table className="tbl">
-                  <thead><tr><th>Exam</th><th>Date</th><th className="text-right">Marks</th><th className="text-right">%</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Exam</th>
+                      <th>Date</th>
+                      <th className="text-right">Marks</th>
+                      <th className="text-right">Score</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {data.performance.slice().reverse().slice(0, 6).map((p) => (
                       <tr key={p.examId}>
-                        <td>{p.name} <span className="text-xs text-slate-500">{p.subject}</span></td>
+                        <td>
+                          <span className="font-medium text-slate-900">{p.name}</span>
+                          <span className="ml-2 text-xs text-slate-500">{p.subject}</span>
+                        </td>
                         <td className="whitespace-nowrap">{formatDay(p.examDate)}</td>
                         <td className="text-right tabular-nums">{p.absent ? "Absent" : `${p.obtained} / ${p.total}`}</td>
-                        <td className="text-right tabular-nums">{p.absent ? "—" : `${p.percentage}%`}</td>
+                        <td className="text-right">
+                          {p.absent ? <Badge>—</Badge> : <Badge tone={p.percentage >= 40 ? "good" : "bad"}>{p.percentage}%</Badge>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {basePath ? <Link href={`${basePath}/exams`} className="mt-3 inline-block text-sm font-medium text-teal-700 hover:underline">All results</Link> : null}
+              {basePath ? (
+                <Link href={`${basePath}/exams`} className="mt-4 inline-flex text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+                  View all results →
+                </Link>
+              ) : null}
             </>
           )}
         </Card>
 
-        <Card title="Upcoming exams">
-          {data.upcoming.length === 0 ? (
-            <p className="text-sm text-slate-600">No exams scheduled.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {data.upcoming.map((e) => (
-                <li key={e.id} className="py-2.5">
-                  <p className="font-medium text-slate-900">{e.name}</p>
-                  <p className="text-xs text-slate-500">{e.subject} · {formatDay(e.examDate)} at {e.examTime}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <div className="space-y-6">
+          <Card title="Upcoming exams" icon={<CalendarClock className="h-4 w-4" aria-hidden="true" />}>
+            {data.upcoming.length === 0 ? (
+              <p className="text-sm text-slate-500">No exams scheduled.</p>
+            ) : (
+              <ul className="space-y-3">
+                {data.upcoming.map((e) => (
+                  <li key={e.id} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3 ring-1 ring-inset ring-slate-100">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-white text-center text-[11px] font-bold leading-tight text-indigo-700 shadow-sm ring-1 ring-indigo-100">
+                      {formatDay(e.examDate).split(" ")[0]}
+                      <span className="block text-[9px] font-semibold uppercase text-slate-500">{formatDay(e.examDate).split(" ")[1]}</span>
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{e.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {e.subject} · {e.examTime}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
 
-        <Card title="Batches">
-          {data.batches.length === 0 ? (
-            <p className="text-sm text-slate-600">Not enrolled in a batch yet.</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {data.batches.map((b) => (
-                <li key={b.id}>
-                  <p className="font-medium text-slate-900">{b.name}</p>
-                  <p className="text-xs text-slate-500">{b.subject ?? "General"} · {b.teacher.user.name}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+          <Card title="Batches" icon={<Layers className="h-4 w-4" aria-hidden="true" />}>
+            {data.batches.length === 0 ? (
+              <p className="text-sm text-slate-500">Not enrolled in a batch yet.</p>
+            ) : (
+              <ul className="space-y-3">
+                {data.batches.map((b) => (
+                  <li key={b.id} className="flex items-center gap-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg grad-brand text-xs font-bold text-white">
+                      {b.name.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{b.name}</p>
+                      <p className="truncate text-xs text-slate-500">
+                        {b.subject ?? "General"} · {b.teacher.user.name}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
 
-        <Card title="Attendance" className="lg:col-span-2" description="Latest 30 recorded days">
+        <Card title="Recent attendance" description="Latest 30 recorded days" className="lg:col-span-3" icon={<CalendarCheck className="h-4 w-4" aria-hidden="true" />}>
           {data.attendance.rows.length === 0 ? (
-            <p className="text-sm text-slate-600">Attendance appears here once your teacher records it.</p>
+            <p className="text-sm text-slate-500">Attendance appears here once it is recorded.</p>
           ) : (
-            <div className="-mx-4 overflow-x-auto sm:-mx-5">
+            <div className="-mx-5 overflow-x-auto">
               <table className="tbl">
-                <thead><tr><th>Date</th><th>Batch</th><th>Status</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Batch</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {data.attendance.rows.slice(0, 30).map((r, i) => (
                     <tr key={`${r.date.toISOString()}-${i}`}>
                       <td className="whitespace-nowrap">{formatDay(r.date)}</td>
                       <td>{r.batch.name}</td>
-                      <td><Badge tone={r.status === "ABSENT" ? "bad" : r.status === "PRESENT" ? "good" : "neutral"}>{STATUS[r.status]}</Badge></td>
+                      <td>
+                        <Badge tone={STATUS[r.status]?.tone ?? "neutral"}>{STATUS[r.status]?.label ?? r.status}</Badge>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

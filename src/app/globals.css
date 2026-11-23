@@ -1,30 +1,183 @@
 @import "tailwindcss";
 
-@layer base {
-  html { -webkit-text-size-adjust: 100%; }
-  body { @apply bg-slate-50 text-slate-900 antialiased; }
-  :focus-visible { @apply outline-2 outline-offset-2 outline-teal-600; }
+/* ------------------------------------------------------------------ */
+/* Design tokens                                                        */
+/* Brand: indigo to violet, with an amber spark. Neutral: slate.        */
+/* Text on surfaces meets WCAG AA (4.5:1) in every combination used.   */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  --font-sans: var(--font-plus), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection { background: #c7d2fe; color: #1e1b4b; }
+  :focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 10px; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Gradients (plain CSS, so they never depend on utility naming)        */
+/* ------------------------------------------------------------------ */
+
+.grad-brand { background-image: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); }
+.grad-hero  { background-image: linear-gradient(120deg, #1e1b4b 0%, #3730a3 45%, #6d28d9 100%); }
+.grad-spark { background-image: linear-gradient(135deg, #fbbf24 0%, #f97316 100%); }
+.bar-brand  { background-image: linear-gradient(90deg, #6366f1, #8b5cf6); }
+.bar-good   { background-image: linear-gradient(90deg, #10b981, #34d399); }
+.bar-warn   { background-image: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.bar-bad    { background-image: linear-gradient(90deg, #f43f5e, #fb7185); }
+.bar-info   { background-image: linear-gradient(90deg, #0ea5e9, #38bdf8); }
+.bar-neutral{ background-image: linear-gradient(90deg, #94a3b8, #cbd5e1); }
+
+.sidebar {
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(99, 102, 241, 0.35), transparent 60%),
+    linear-gradient(180deg, #111133 0%, #1e1b4b 100%);
+}
+
+.auth-bg {
+  background:
+    radial-gradient(60% 50% at 10% 10%, rgba(99, 102, 241, 0.18), transparent 70%),
+    radial-gradient(50% 45% at 90% 80%, rgba(168, 85, 247, 0.16), transparent 70%),
+    #f5f6fb;
+}
+
+.brand-panel {
+  background:
+    radial-gradient(70% 60% at 100% 0%, rgba(251, 191, 36, 0.28), transparent 60%),
+    linear-gradient(160deg, #312e81 0%, #4338ca 50%, #6d28d9 100%);
+}
+
+.dot-grid {
+  background-image: radial-gradient(rgba(99, 102, 241, 0.14) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Components                                                           */
+/* ------------------------------------------------------------------ */
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold;
+    @apply transition duration-200 ease-out select-none;
+    @apply disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none;
   }
-  .btn-primary { @apply bg-teal-700 text-white shadow-sm hover:bg-teal-800; }
-  .btn-secondary { @apply bg-white text-slate-800 ring-1 ring-slate-300 hover:bg-slate-50; }
-  .btn-danger { @apply bg-white text-rose-700 ring-1 ring-rose-300 hover:bg-rose-50; }
-  .btn-sm { @apply px-2.5 py-1.5 text-xs; }
+  .btn:active:not(:disabled) { transform: translateY(1px) scale(0.99); }
 
-  .input, .select, .textarea {
-    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400;
-    @apply focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 focus:outline-none;
+  .btn-primary {
+    @apply text-white shadow-md shadow-indigo-600/25;
+    background-image: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
   }
-  .label { @apply mb-1 block text-xs font-medium text-slate-600; }
+  .btn-primary:hover:not(:disabled) { @apply shadow-lg shadow-indigo-600/35; filter: brightness(1.06); transform: translateY(-1px); }
 
-  .card { @apply rounded-xl border border-slate-200 bg-white shadow-sm; }
+  .btn-secondary {
+    @apply bg-white text-slate-800 shadow-sm ring-1 ring-inset ring-slate-200;
+  }
+  .btn-secondary:hover:not(:disabled) { @apply bg-slate-50 ring-slate-300; }
+
+  .btn-danger {
+    @apply bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200;
+  }
+  .btn-danger:hover:not(:disabled) { @apply bg-rose-100; }
+
+  .btn-sm { @apply px-3 py-1.5 text-xs; }
+
+  .input,
+  .select,
+  .textarea {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm;
+    @apply placeholder:text-slate-400 transition duration-200;
+    @apply hover:border-slate-300;
+    @apply focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/15;
+    @apply disabled:bg-slate-50 disabled:text-slate-500;
+  }
+
+  .label { @apply mb-1.5 block text-xs font-semibold tracking-wide text-slate-600; }
+
+  .card {
+    @apply rounded-2xl border border-slate-200/80 bg-white;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px -18px rgba(30, 27, 75, 0.18);
+  }
+  .card-interactive { @apply transition duration-300; }
+  .card-interactive:hover { transform: translateY(-2px); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 18px 40px -20px rgba(30, 27, 75, 0.28); }
 
   .tbl { @apply w-full text-left text-sm; }
-  .tbl th { @apply whitespace-nowrap border-b border-slate-200 bg-slate-50/60 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500; }
-  .tbl td { @apply border-b border-slate-100 px-3 py-2.5 align-middle; }
+  .tbl th {
+    @apply whitespace-nowrap border-b border-slate-200 bg-slate-50/80 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500;
+  }
+  .tbl td { @apply border-b border-slate-100 px-4 py-3.5 align-middle text-slate-700; }
+  .tbl tbody tr { @apply transition duration-150; }
+  .tbl tbody tr:hover { @apply bg-indigo-50/40; }
   .tbl tr:last-child td { @apply border-b-0; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Motion. Everything here is disabled for users who ask for less.      */
+/* ------------------------------------------------------------------ */
+
+@keyframes tx-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes tx-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes tx-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+@keyframes tx-width {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes tx-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes tx-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+@keyframes tx-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+}
+
+.tx-enter { animation: tx-fade-up 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.tx-pop   { animation: tx-scale-in 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.tx-float { animation: tx-float 6s ease-in-out infinite; }
+.tx-spark { animation: tx-pulse-ring 2.4s ease-out infinite; }
+.tx-bar   { transform-origin: bottom; animation: tx-grow 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.tx-track { transform-origin: left; animation: tx-width 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.tx-skeleton {
+  background: linear-gradient(90deg, #eef0f7 0%, #f8f9fc 50%, #eef0f7 100%);
+  background-size: 800px 100%;
+  animation: tx-shimmer 1.4s linear infinite;
+}
+
+/* Staggered entrance for lists and grids. Each child rises in turn. */
+.tx-stagger > * { animation: tx-fade-up 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.tx-stagger > *:nth-child(1) { animation-delay: 40ms; }
+.tx-stagger > *:nth-child(2) { animation-delay: 110ms; }
+.tx-stagger > *:nth-child(3) { animation-delay: 180ms; }
+.tx-stagger > *:nth-child(4) { animation-delay: 250ms; }
+.tx-stagger > *:nth-child(5) { animation-delay: 320ms; }
+.tx-stagger > *:nth-child(6) { animation-delay: 390ms; }
+.tx-stagger > *:nth-child(n + 7) { animation-delay: 450ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

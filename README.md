@@ -22,7 +22,7 @@ cp .env.example .env          # set DATABASE_URL, APP_URL, the initial owner, an
 npm install
 npx prisma generate
 npx prisma migrate deploy     # applies prisma/migrations (use "migrate dev" while developing)
-npm run dev                   # http://tuterax.vercel.app
+npm run dev                   # http://localhost:3000
 ```
 
 On first start the owner account is created from `INITIAL_TEACHER_EMAIL` and `INITIAL_TEACHER_PASSWORD`. An existing account is never overwritten. Remove the password from `.env` after first sign-in.
@@ -86,6 +86,18 @@ The exchange requires JavaScript. Without it, the page cannot read the fragment.
 - **Shutdown.** On SIGTERM or SIGINT the runner stops polling and waits for the current pass to finish before the process exits.
 - Alternative: set `JOB_RUNNER=off` and call `POST /api/jobs/run` every minute with `Authorization: Bearer $CRON_SECRET`.
 - Webhook: register `https://<domain>/api/webhooks/nishchit` with `NISHCHIT_WEBHOOK_SECRET`. Signatures are checked with a five-minute window.
+
+## Design system
+
+The interface uses one design system. Its tokens and motion live in `src/app/globals.css`, and its components in `src/components/`.
+
+- **Brand:** an indigo-to-violet gradient with an amber accent. The logo (`src/components/logo.tsx`) is an open book whose fold forms a T, with an amber spark. The browser icon is `public/favicon.svg`.
+- **Type:** Plus Jakarta Sans, loaded by `next/font/google` at build time. The build needs internet access the first time it runs.
+- **Icons:** `lucide-react`, chosen by destination in `nav-links.tsx`. Emoji are deliberately not used as icons, because they render differently on each operating system.
+- **Motion:** staggered entrances, rising chart bars, and a floating empty-state mark. Everything is disabled automatically for users who set "reduce motion" in their operating system.
+- **Contrast:** text and interface colours are chosen to meet WCAG AA (4.5:1 for body text).
+
+The redesign changed appearance only. Services, actions, API routes, database code and form field names are unchanged.
 
 ## Environment
 

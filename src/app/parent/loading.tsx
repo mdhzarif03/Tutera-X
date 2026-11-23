@@ -1,12 +1,23 @@
 export default function Loading() {
   return (
-    <div role="status" aria-live="polite" className="animate-pulse space-y-4" aria-label="Loading">
-      <div className="h-8 w-56 rounded bg-slate-200" />
-      <div className="h-4 w-80 rounded bg-slate-100" />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => <div key={i} className="h-24 rounded-xl bg-white ring-1 ring-slate-200" />)}
+    <div role="status" aria-live="polite" aria-label="Loading" className="space-y-6">
+      <div className="space-y-3">
+        <div className="tx-skeleton h-3 w-24 rounded-full" />
+        <div className="tx-skeleton h-9 w-72 rounded-xl" />
+        <div className="tx-skeleton h-4 w-96 max-w-full rounded-lg" />
       </div>
-      <div className="h-64 rounded-xl bg-white ring-1 ring-slate-200" />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="card space-y-4 p-5">
+            <div className="tx-skeleton h-3 w-20 rounded-full" />
+            <div className="tx-skeleton h-8 w-24 rounded-lg" />
+          </div>
+        ))}
+      </div>
+      <div className="card space-y-4 p-6">
+        <div className="tx-skeleton h-4 w-40 rounded-full" />
+        <div className="tx-skeleton h-40 w-full rounded-xl" />
+      </div>
     </div>
   );
 }

@@ -3,14 +3,19 @@
 import { useState } from "react";
 import { analyzeSms } from "@/lib/sms/segments";
 
-/** Message textarea with a live segment count. The count is an estimate; the server's figure is billed. */
+/**
+ * Message textarea with a live estimate: characters, encoding, segments and a fill meter.
+ * The server's quote (Check cost) is the figure that matters for billing.
+ */
 export function SmsComposer({ name = "body", defaultValue = "" }: { name?: string; defaultValue?: string }) {
   const [text, setText] = useState(defaultValue);
-  const withPrefix = `[Tutera-X] ${text}`;
-  const a = analyzeSms(withPrefix);
-  const remaining = a.encoding === "gsm7" ? (a.segments <= 1 ? a.singleLimit - a.units : a.segments * a.multiLimit - a.units) : null;
+  const a = analyzeSms(`[Tutera-X] ${text}`);
+  const capacity = a.segments <= 1 ? a.singleLimit : a.segments * a.multiLimit;
+  const fill = Math.min(100, (a.units / Math.max(1, capacity)) * 100);
+  const gsm = a.encoding === "gsm7";
+
   return (
-    <div>
+    <div className="space-y-3">
       <textarea
         name={name}
         required
@@ -18,23 +23,36 @@ export function SmsComposer({ name = "body", defaultValue = "" }: { name?: strin
         rows={5}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        className="textarea"
-        placeholder="Dear {name}, your Bangla or English message here."
+        className="textarea leading-relaxed"
+        placeholder="Dear {name}, your message here…"
         aria-describedby="sms-counter"
       />
-      <div id="sms-counter" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-        <span>
-          <strong className="font-semibold text-slate-900">{a.units}</strong> characters (including the Tutera-X prefix)
-        </span>
-        <span>
-          Encoding: <strong className="font-semibold text-slate-900">{a.encoding === "gsm7" ? "GSM-7 (standard)" : "UCS-2 (Bangla or symbols, about 3x cost)"}</strong>
-        </span>
-        <span>
-          <strong className="font-semibold text-slate-900">{a.segments}</strong> segment{a.segments === 1 ? "" : "s"} per message
-        </span>
-        {remaining !== null && a.segments > 0 ? <span>{remaining} left in this segment</span> : null}
+      <div id="sms-counter" className="rounded-xl bg-slate-50 p-3.5 ring-1 ring-inset ring-slate-200">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200" aria-hidden="true">
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${gsm ? "bar-brand" : "bar-warn"}`}
+            style={{ width: `${fill}%` }}
+          />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-600">
+          <span>
+            <strong className="font-semibold text-slate-900">{a.units}</strong> characters
+          </span>
+          <span>
+            {gsm ? (
+              <span className="font-semibold text-emerald-700">Standard encoding</span>
+            ) : (
+              <span className="font-semibold text-amber-700">Bangla or symbols: about 3x cost</span>
+            )}
+          </span>
+          <span>
+            <strong className="font-semibold text-slate-900">{a.segments}</strong> segment{a.segments === 1 ? "" : "s"} per message
+          </span>
+        </div>
       </div>
-      <p className="mt-1 text-xs text-slate-500">Use {"{name}"} to insert each student's name. Keep messages in plain English where possible.</p>
+      <p className="text-xs text-slate-500">
+        Use <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-700">{"{name}"}</code> to insert each student&apos;s name.
+      </p>
     </div>
   );
 }
