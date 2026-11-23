@@ -134,7 +134,7 @@ export async function refundProviderCredits(tx: Tx, recipientId: string): Promis
 export async function adjustAllowance(actorId: string, teacherId: string, delta: number, note: string | null): Promise<void> {
   await db.$transaction(async (tx) => {
     const actor = await tx.teacherProfile.findUnique({ where: { userId: actorId }, select: { role: true } });
-    if (actor?.role !== "OWNER") throw new UserError("Only the owner can change SMS allowances.");
+    if (actor?.role !== "OWNER") throw new UserError("Only the owner can change message credits.");
 
     const target = await tx.teacherProfile.findUnique({
       where: { userId: teacherId },
@@ -143,7 +143,7 @@ export async function adjustAllowance(actorId: string, teacherId: string, delta:
     if (!target) throw new UserError("Teacher not found.");
     const state = { allowance: target.smsAllowance, used: target.smsCreditsUsed, reserved: target.smsCreditsReserved };
     if (!canAdjust(state, delta)) {
-      throw new UserError("That change would drop the allowance below the credits already used or reserved.");
+      throw new UserError("That would take away credits that are already used or waiting to send.");
     }
 
     const affected = await tx.$executeRaw`
@@ -152,7 +152,7 @@ export async function adjustAllowance(actorId: string, teacherId: string, delta:
        WHERE "userId" = ${teacherId}
          AND "smsCreditsUsed" + "smsCreditsReserved" <= "smsAllowance" + ${delta}
          AND "smsAllowance" + ${delta} >= 0`;
-    if (affected !== 1) throw new UserError("The allowance changed while you were editing. Try again.");
+    if (affected !== 1) throw new UserError("Something changed while you were editing. Please try again.");
 
     await tx.smsAllowanceEntry.create({
       data: { teacherId, kind: delta > 0 ? "GRANT" : "ADJUST", credits: Math.abs(delta), actorId, note },

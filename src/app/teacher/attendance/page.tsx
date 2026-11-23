@@ -60,11 +60,11 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
 
   return (
     <>
-      <PageHeader eyebrow="Daily register" title="Attendance" description="Pick a batch and a day, mark each student, then save. Choose Not marked to remove a mark." />
+      <PageHeader title="Attendance" description="Choose a batch and a day, tap each student's status, then save." />
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
 
       {batches.length === 0 ? (
-        <EmptyState title="Create a batch first" body="Attendance is recorded per batch. Create a batch and add students to it." icon={<CalendarCheck2 className="h-6 w-6" aria-hidden="true" />} />
+        <EmptyState title="Create a batch first" body="Attendance is taken per batch. Create one and add students." icon={<CalendarCheck2 className="h-6 w-6" aria-hidden="true" />} />
       ) : (
         <>
           <div className="card mb-6 flex flex-wrap items-center gap-4 p-4 sm:p-5">
@@ -171,7 +171,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
                     <Save className="h-4 w-4" aria-hidden="true" />
                     Save attendance
                   </button>
-                  <span className="text-xs text-slate-500">Unchanged students are left as they are.</span>
+                  <span className="text-xs text-slate-500">Students you don't change are left as they are.</span>
                 </div>
               </form>
 
@@ -180,7 +180,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
                 <input type="hidden" name="date" value={date} />
                 <button className="btn btn-secondary btn-sm" type="submit">
                   <CheckCheck className="h-4 w-4" aria-hidden="true" />
-                  Mark everyone present and save
+                  Mark everyone present
                 </button>
               </form>
             </>

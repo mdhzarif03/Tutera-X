@@ -12,7 +12,7 @@ export default async function ResetPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const hasToken = Boolean(await readAccountTokenCookie("reset"));
   return (
-    <AuthCard title="Choose a new password" description="This link works once and expires after one hour.">
+    <AuthCard title="Choose a new password" description="This link works only once and expires in one hour.">
       <Flash error={pick(sp, "error")} />
       {hasToken ? (
         <form action={resetAction} className="space-y-4">

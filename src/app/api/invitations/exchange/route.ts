@@ -27,7 +27,7 @@ export async function POST(request: Request): Promise<Response> {
     select: { acceptedAt: true, revokedAt: true, expiresAt: true },
   });
   if (!inv || inv.acceptedAt || inv.revokedAt || inv.expiresAt < new Date()) {
-    return Response.json({ error: "This invitation has expired or has already been used. Ask for a new one." }, { status: 404 });
+    return Response.json({ error: "This link has expired or was already used. Ask for a new one." }, { status: 404 });
   }
 
   await setInviteCookie(token);

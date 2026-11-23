@@ -42,12 +42,12 @@ export default async function ExamSheetPage({
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
 
       <p className="mb-4 text-sm text-slate-600">
-        Batches: {exam.batches.map((b) => b.batch.name).join(", ")}. Enter marks for each student, or tick Absent. Results stay private until you publish.
-        {missing > 0 ? <span className="font-medium text-amber-800"> {missing} student{missing === 1 ? "" : "s"} still need a mark or absence.</span> : null}
+        Batches: {exam.batches.map((b) => b.batch.name).join(", ")}. Enter each student's marks, or tick Absent. Students see results only after you share them.
+        {missing > 0 ? <span className="font-medium text-amber-800"> {missing} student{missing === 1 ? "" : "s"} still need marks or an absence tick.</span> : null}
       </p>
 
       {rows.length === 0 ? (
-        <EmptyState title="No students on this exam" body="The exam's batches have no current students." />
+        <EmptyState title="No students in this exam yet" body="No students are in this exam's batches yet." />
       ) : (
         <>
           <form action={saveMarksAction}>
@@ -81,7 +81,7 @@ export default async function ExamSheetPage({
                             <span className="sr-only">Absent</span>
                           </label>
                         </td>
-                        <td>{r.published ? <Badge tone="good">published</Badge> : r.marks !== null || r.absent ? <Badge tone="info">entered</Badge> : <Badge tone="warn">missing</Badge>}</td>
+                        <td>{r.published ? <Badge tone="good">shared</Badge> : r.marks !== null || r.absent ? <Badge tone="info">entered</Badge> : <Badge tone="warn">to enter</Badge>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -89,7 +89,7 @@ export default async function ExamSheetPage({
               </div>
             </Card>
             <div className="mt-4 flex flex-wrap gap-2">
-              {!published ? <button className="btn btn-secondary" type="submit">Save marks</button> : <p className="text-sm text-slate-600">Results are published. Changes after publication are recorded in the revision history.</p>}
+              {!published ? <button className="btn btn-secondary" type="submit">Save marks</button> : <p className="text-sm text-slate-600">Results are shared. Changes are logged.</p>}
             </div>
           </form>
 
@@ -97,10 +97,10 @@ export default async function ExamSheetPage({
             <form action={publishResultsAction} className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-teal-200 bg-teal-50/60 p-4">
               <input type="hidden" name="examId" value={exam.id} />
               <div className="flex-1 text-sm text-teal-950">
-                <p className="font-semibold">Publish results</p>
-                <p className="text-teal-900/80">Students see their marks on their dashboards, and each guardian receives one SMS.</p>
+                <p className="font-semibold">Share results</p>
+                <p className="text-teal-900/80">Students can see their marks. Each parent gets one text.</p>
               </div>
-              <button className="btn btn-primary" type="submit" disabled={!publishable}>Publish {rows.length} result{rows.length === 1 ? "" : "s"}</button>
+              <button className="btn btn-primary" type="submit" disabled={!publishable}>Share {rows.length} result{rows.length === 1 ? "" : "s"}</button>
             </form>
           ) : null}
         </>

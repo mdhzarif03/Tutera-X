@@ -30,18 +30,18 @@ export function InviteExchange() {
           return;
         }
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setMessage(data.error ?? "This invitation could not be opened.");
+        setMessage(data.error ?? "This link couldn't be opened.");
         setState("error");
       })
       .catch(() => {
-        setMessage("Could not reach the server. Reload the page to try again.");
+        setMessage("We couldn't connect. Please refresh and try again.");
         setState("error");
       });
   }, []);
 
-  if (state === "checking") return <p className="text-sm text-slate-600" role="status">Checking your invitation…</p>;
+  if (state === "checking") return <p className="text-sm text-slate-600" role="status">Checking your link…</p>;
   if (state === "missing") {
-    return <p className="text-sm text-slate-600">Open the invitation link you were sent. It contains the code needed to join.</p>;
+    return <p className="text-sm text-slate-600">Open the link you were sent to join.</p>;
   }
   return (
     <p role="alert" className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-900 ring-1 ring-inset ring-rose-200">

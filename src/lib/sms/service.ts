@@ -69,7 +69,7 @@ export async function queueSms(
     const state = await readAllowance(tx, input.teacherId);
     if (state.remaining < needed) {
       throw new UserError(
-        `Not enough SMS credits. You have ${state.remaining} left and this send needs about ${needed}. Ask the owner to add credits.`,
+        `Not enough message credits. You have ${state.remaining} left and this message needs about ${needed}. Ask the owner to add more.`,
       );
     }
   }

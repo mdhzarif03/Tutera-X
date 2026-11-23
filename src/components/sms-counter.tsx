@@ -40,13 +40,13 @@ export function SmsComposer({ name = "body", defaultValue = "" }: { name?: strin
           </span>
           <span>
             {gsm ? (
-              <span className="font-semibold text-emerald-700">Standard encoding</span>
+              <span className="font-semibold text-emerald-700">Standard message</span>
             ) : (
-              <span className="font-semibold text-amber-700">Bangla or symbols: about 3x cost</span>
+              <span className="font-semibold text-amber-700">Bangla or symbols cost more</span>
             )}
           </span>
           <span>
-            <strong className="font-semibold text-slate-900">{a.segments}</strong> segment{a.segments === 1 ? "" : "s"} per message
+            <strong className="font-semibold text-slate-900">{a.segments}</strong> text part{a.segments === 1 ? "" : "s"} per message
           </span>
         </div>
       </div>

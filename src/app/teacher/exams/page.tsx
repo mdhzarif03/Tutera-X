@@ -11,7 +11,7 @@ import { num } from "@/lib/money";
 export const metadata = { title: "Exams" };
 
 const STATUS_TONE = { SCHEDULED: "info", RESULTS_DRAFT: "warn", RESULTS_PUBLISHED: "good", CANCELLED: "neutral" } as const;
-const STATUS_LABEL = { SCHEDULED: "scheduled", RESULTS_DRAFT: "marking", RESULTS_PUBLISHED: "published", CANCELLED: "cancelled" } as const;
+const STATUS_LABEL = { SCHEDULED: "coming up", RESULTS_DRAFT: "marking", RESULTS_PUBLISHED: "results shared", CANCELLED: "cancelled" } as const;
 
 export default async function ExamsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const t = await requireRole("TEACHER");
@@ -20,13 +20,13 @@ export default async function ExamsPage({ searchParams }: { searchParams: Promis
 
   return (
     <>
-      <PageHeader title="Exams" description="Schedule exams for one or more batches. Students are told by SMS. Results are published from each exam's page." />
+      <PageHeader title="Exams" description="Schedule an exam for one or more batches. Students get a text straight away." />
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card title="Schedule an exam" className="lg:col-span-1">
           {batches.length === 0 ? (
-            <p className="text-sm text-slate-600">Create a batch first. Exams are scheduled for batches.</p>
+            <p className="text-sm text-slate-600">Create a batch first. Exams are for batches.</p>
           ) : (
             <form action={createExamAction} className="grid gap-3">
               <Field label="Exam name" htmlFor="name"><input id="name" name="name" required maxLength={120} className="input" placeholder="Unit test 3" /></Field>
@@ -51,14 +51,14 @@ export default async function ExamsPage({ searchParams }: { searchParams: Promis
                   ))}
                 </div>
               </fieldset>
-              <button className="btn btn-primary" type="submit">Schedule and notify students</button>
+              <button className="btn btn-primary" type="submit">Schedule exam</button>
             </form>
           )}
         </Card>
 
         <Card title="All exams" className="lg:col-span-2">
           {exams.length === 0 ? (
-            <EmptyState title="No exams yet" body="Scheduled exams appear here with their status, from scheduled through to published results." />
+            <EmptyState title="No exams yet" body="Exams you add appear here." />
           ) : (
             <div className="-mx-4 overflow-x-auto sm:-mx-5">
               <table className="tbl">

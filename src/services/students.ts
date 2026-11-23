@@ -68,7 +68,7 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
     select: { userId: true },
   });
   if (duplicate) {
-    throw new UserError("A student with this name and guardian already exists. Add that student to the batch instead.");
+    throw new UserError("This student is already saved. Add them to the batch instead.");
   }
   if (input.batchId) await assertBatchOwned(teacherId, input.batchId);
 
@@ -129,7 +129,7 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
       { timeout: 20_000 },
     );
   } catch (err) {
-    if (isUniqueViolation(err)) throw new UserError("This phone number is already used by another account.");
+    if (isUniqueViolation(err)) throw new UserError("This phone number is already in use.");
     throw err;
   }
   return { studentId, username };
@@ -276,7 +276,7 @@ export async function updateStudent(teacherId: string, studentId: string, input:
       await audit(tx, { actorId: teacherId, action: "student.update", entityType: "student", entityId: studentId, changes: { className: input.className, monthlyFee: input.monthlyFee } });
     });
   } catch (err) {
-    if (isUniqueViolation(err)) throw new UserError("This phone number is already used by another account.");
+    if (isUniqueViolation(err)) throw new UserError("This phone number is already in use.");
     throw err;
   }
 }
@@ -300,13 +300,13 @@ export async function resendActivation(teacherId: string, studentId: string): Pr
     where: { id: studentId },
     select: { status: true, name: true, username: true, phoneE164: true, studentProfile: { select: { guardian: { select: { phoneE164: true } } } } },
   });
-  if (user.status !== "PENDING_ACTIVATION") throw new UserError("This student has already activated the account.");
-  if (!user.username) throw new UserError("This account has no username.");
+  if (user.status !== "PENDING_ACTIVATION") throw new UserError("This student has already joined.");
+  if (!user.username) throw new UserError("This account has no login ID.");
 
   const token = randomToken(32);
   const body = render(templates.studentActivation, { name: user.name, username: user.username, link: activationLink(token) });
   const phone = user.phoneE164 ?? user.studentProfile?.guardian.phoneE164;
-  if (!phone) throw new UserError("No phone number is on file for this student.");
+  if (!phone) throw new UserError("There's no phone number saved for this student.");
 
   await db.$transaction(async (tx) => {
     await tx.studentActivation.updateMany({ where: { userId: studentId, usedAt: null }, data: { usedAt: new Date() } });
@@ -330,7 +330,7 @@ export async function createParentLogin(teacherId: string, studentId: string): P
     where: { userId: studentId },
     select: { guardian: { select: { id: true, name: true, phoneE164: true, parentUser: { select: { userId: true } } } } },
   });
-  if (s.guardian.parentUser) throw new UserError("This guardian already has a parent login.");
+  if (s.guardian.parentUser) throw new UserError("This parent already has an account.");
 
   const userId = randomUUID();
   const username = await nextUsername("P");
@@ -363,7 +363,7 @@ export async function createParentLogin(teacherId: string, studentId: string): P
       await audit(tx, { actorId: teacherId, action: "parent.create", entityType: "parent", entityId: userId, changes: { studentId } });
     });
   } catch (err) {
-    if (isUniqueViolation(err)) throw new UserError("This guardian phone number is already used by another account.");
+    if (isUniqueViolation(err)) throw new UserError("This parent's phone number is already in use.");
     throw err;
   }
   return { username };
@@ -393,7 +393,7 @@ export async function deleteStudent(teacherId: string, studentId: string): Promi
 
   if (hasRecords) {
     await setStudentArchived(teacherId, studentId, true);
-    return "This student has records, so they were archived instead of deleted. Their history is kept.";
+    return "This student has records, so we archived them instead. Nothing has been lost.";
   }
 
   const permanent = otherTeachers === 0;

@@ -34,7 +34,7 @@ export async function createStudentAction(formData: FormData): Promise<void> {
     const input = students.parseStudentInput(fields(formData));
     const r = await students.createStudent(t.id, input);
     return {
-      message: `Student added. Login username: ${r.username}. Activation SMS queued.`,
+      message: `Student added. Login ID: ${r.username}. Activation SMS queued.`,
       redirectTo: `/teacher/students/${r.studentId}`,
     };
   });
@@ -65,7 +65,7 @@ export async function resendActivationAction(formData: FormData): Promise<void> 
   const studentId = requireId(str(formData, "studentId"), "Student");
   return runAction(`/teacher/students/${studentId}`, async () => {
     await students.resendActivation(t.id, studentId);
-    return { message: "A new activation link has been sent. The previous link no longer works." };
+    return { message: "A new welcome link has been sent. The old one no longer works." };
   });
 }
 
@@ -74,7 +74,7 @@ export async function createParentLoginAction(formData: FormData): Promise<void>
   const studentId = requireId(str(formData, "studentId"), "Student");
   return runAction(`/teacher/students/${studentId}`, async () => {
     const r = await students.createParentLogin(t.id, studentId);
-    return { message: `Parent login created. Username: ${r.username}. Activation SMS queued.` };
+    return { message: `Parent account created. Login ID: ${r.username}. Activation SMS queued.` };
   });
 }
 
@@ -83,7 +83,7 @@ export async function addAdjustmentAction(formData: FormData): Promise<void> {
   const studentId = requireId(str(formData, "studentId"), "Student");
   return runAction(`/teacher/students/${studentId}`, async () => {
     await payments.addAdjustment(t.id, studentId, fields(formData));
-    return { message: "Adjustment recorded." };
+    return { message: "Change saved." };
   });
 }
 
@@ -175,8 +175,8 @@ export async function saveAttendanceAction(formData: FormData): Promise<void> {
     const r = entries.length
       ? await attendance.saveAttendance(t.id, batchId, date, entries)
       : { saved: 0, noticesQueued: 0, noticesSkipped: 0 };
-    const notices = r.noticesQueued ? ` ${r.noticesQueued} absence notice${r.noticesQueued === 1 ? "" : "s"} queued.` : "";
-    const skipped = r.noticesSkipped ? ` ${r.noticesSkipped} notice${r.noticesSkipped === 1 ? " was" : "s were"} not sent because the SMS allowance is used up.` : "";
+    const notices = r.noticesQueued ? ` ${r.noticesQueued} absence text${r.noticesQueued === 1 ? "" : "s"} on the way.` : "";
+    const skipped = r.noticesSkipped ? ` ${r.noticesSkipped} notice${r.noticesSkipped === 1 ? " was" : "s were"} not sent: no credits left.` : "";
     const cleared = removed ? ` ${removed} mark${removed === 1 ? " was" : "s were"} removed.` : "";
     return { message: `Attendance saved for ${r.saved} student${r.saved === 1 ? "" : "s"}.${notices}${skipped}${cleared}` };
   });
@@ -188,7 +188,7 @@ export async function markAllPresentAction(formData: FormData): Promise<void> {
   const date = requireText(str(formData, "date"), "Date", 10);
   return runAction(attendancePath(batchId, date), async () => {
     const r = await attendance.markAllPresent(t.id, batchId, date);
-    return { message: `Everyone marked present (${r.saved} recorded).` };
+    return { message: `Everyone is marked present.` };
   });
 }
 
@@ -200,7 +200,7 @@ export async function createExamAction(formData: FormData): Promise<void> {
     const batchIds = strs(formData, "batchIds");
     const input = exams.parseExamInput(fields(formData), batchIds);
     const id = await exams.createExam(t.id, input);
-    return { message: "Exam scheduled. Student notices are queued.", redirectTo: `/teacher/exams/${id}` };
+    return { message: "Exam scheduled. Students are being told.", redirectTo: `/teacher/exams/${id}` };
   });
 }
 
@@ -229,7 +229,7 @@ export async function publishResultsAction(formData: FormData): Promise<void> {
   const examId = requireId(str(formData, "examId"), "Exam");
   return runAction(`/teacher/exams/${examId}`, async () => {
     const r = await exams.publishResults(t.id, examId);
-    const skipped = r.noticesSkipped ? ` ${r.noticesSkipped} notice${r.noticesSkipped === 1 ? " was" : "s were"} not sent: SMS allowance used up.` : "";
+    const skipped = r.noticesSkipped ? ` ${r.noticesSkipped} notice${r.noticesSkipped === 1 ? " was" : "s were"} not sent: no credits left.` : "";
     return { message: `Published ${r.published} result${r.published === 1 ? "" : "s"}. ${r.noticesQueued} guardian notice${r.noticesQueued === 1 ? "" : "s"} queued.${skipped}` };
   });
 }
@@ -267,7 +267,7 @@ export async function sendMessageAction(formData: FormData): Promise<void> {
           ? { kind: "student", studentId: requireId(str(formData, "studentId"), "Student") }
           : { kind: "batches", batchIds: strs(formData, "batchIds") };
     const body = str(formData, "body");
-    if (str(formData, "confirm") !== "yes") throw new UserError("Tick the confirmation box to send.");
+    if (str(formData, "confirm") !== "yes") throw new UserError("Please tick the box to confirm before sending.");
     const r = await comms.sendMessage(t.id, target, body);
     const skipped = r.skippedNoPhone ? ` ${r.skippedNoPhone} recipient${r.skippedNoPhone === 1 ? " has" : "s have"} no phone number on file and were skipped.` : "";
     return { message: `Queued for ${r.recipients} recipient${r.recipients === 1 ? "" : "s"}.${skipped}` };
@@ -277,9 +277,9 @@ export async function sendMessageAction(formData: FormData): Promise<void> {
 export async function refreshBalanceAction(): Promise<void> {
   await teacher();
   return runAction("/teacher/sms", async () => {
-    if (providerMode() === "unconfigured") throw new UserError("The SMS provider is not configured on this server.");
+    if (providerMode() === "unconfigured") throw new UserError("Messages aren't set up on this server yet.");
     const b = await refreshSmsBalance();
-    if (b.status !== "ok") throw new UserError("The SMS provider could not be reached. The last known balance is shown.");
+    if (b.status !== "ok") throw new UserError("We couldn't reach the messaging service. The last known balance is shown.");
     return { message: "Balance refreshed." };
   });
 }
@@ -292,7 +292,7 @@ export async function toggleAbsenceSmsAction(formData: FormData): Promise<void> 
       await tx.teacherProfile.update({ where: { userId: t.id }, data: { absenceSmsEnabled: enabled } });
       await audit(tx, { actorId: t.id, action: "settings.absence_sms", entityType: "teacher", entityId: t.id, changes: { enabled } });
     });
-    return { message: enabled ? "Absence notices are on." : "Absence notices are off." };
+    return { message: enabled ? "Absence texts are on." : "Absence texts are off." };
   });
 }
 
@@ -304,7 +304,7 @@ export async function inviteTeacherAction(formData: FormData): Promise<void> {
     const token = await teachers.inviteTeacher(t.id, str(formData, "email"));
     // The token goes into an httpOnly cookie, not the redirect URL, so it cannot leak through history or logs.
     await setInviteRevealCookie(token);
-    return { message: "Invitation created. Copy the link below and share it privately. It works once and expires in 72 hours." };
+    return { message: "Invitation created. Send the link privately. It works once and expires in three days." };
   });
 }
 
@@ -325,7 +325,7 @@ export async function adjustAllowanceAction(formData: FormData): Promise<void> {
       throw new UserError(err instanceof Error ? err.message : "Enter a whole number of credits.");
     }
     await adjustAllowance(t.id, teacherId, delta, optionalNote(str(formData, "note")));
-    return { message: `Allowance ${delta > 0 ? "increased" : "reduced"} by ${Math.abs(delta)} credit${Math.abs(delta) === 1 ? "" : "s"}.` };
+    return { message: `Credits ${delta > 0 ? "increased" : "reduced"} by ${Math.abs(delta)} credit${Math.abs(delta) === 1 ? "" : "s"}.` };
   });
 }
 
@@ -349,7 +349,7 @@ export async function setTeacherActiveAction(formData: FormData): Promise<void> 
   const active = str(formData, "active") === "1";
   return runAction("/teacher/teachers", async () => {
     await teachers.setTeacherActive(t.id, targetId, active);
-    return { message: active ? "Teacher reactivated." : "Teacher deactivated and signed out." };
+    return { message: active ? "Teacher's access turned on." : "Teacher's access turned off." };
   });
 }
 

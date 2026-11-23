@@ -36,7 +36,7 @@ export async function inviteTeacher(actorId: string, emailRaw: string): Promise<
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new UserError("Enter a valid email address.");
 
   const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
-  if (existing) throw new UserError("A teacher with this email already exists.");
+  if (existing) throw new UserError("This email already has an account.");
 
   const token = randomToken(32);
   try {
@@ -47,7 +47,7 @@ export async function inviteTeacher(actorId: string, emailRaw: string): Promise<
       await audit(tx, { actorId, action: "teacher.invite", entityType: "invitation", entityId: inv.id, changes: { email } });
     });
   } catch (err) {
-    if (isUniqueViolation(err)) throw new UserError("An invitation for this email already exists.");
+    if (isUniqueViolation(err)) throw new UserError("An invitation was already sent to this email.");
     throw err;
   }
   return token;
@@ -72,7 +72,7 @@ export async function acceptInvitation(token: string, nameRaw: string, password:
   assertPasswordPolicy(password);
   const inv = await db.teacherInvitation.findUnique({ where: { tokenHash: sha256(token) } });
   if (!inv || inv.acceptedAt || inv.revokedAt || inv.expiresAt < new Date()) {
-    throw new UserError("This invitation is invalid or has expired.");
+    throw new UserError("This link has expired or was already used.");
   }
   const passwordHash = await hashPassword(password);
   try {
@@ -82,7 +82,7 @@ export async function acceptInvitation(token: string, nameRaw: string, password:
         where: { id: inv.id, acceptedAt: null, revokedAt: null },
         data: { acceptedAt: new Date() },
       });
-      if (claimed.count !== 1) throw new UserError("This invitation has already been used.");
+      if (claimed.count !== 1) throw new UserError("This link was already used.");
       const user = await tx.user.create({
         data: {
           role: "TEACHER",
@@ -98,21 +98,21 @@ export async function acceptInvitation(token: string, nameRaw: string, password:
       return user.id;
     });
   } catch (err) {
-    if (isUniqueViolation(err)) throw new UserError("An account with this email already exists.");
+    if (isUniqueViolation(err)) throw new UserError("This email already has an account.");
     throw err;
   }
 }
 
 export async function setTeacherActive(actorId: string, targetId: string, active: boolean): Promise<void> {
   const actor = await db.teacherProfile.findUnique({ where: { userId: actorId }, select: { role: true } });
-  if (actor?.role !== "OWNER") throw new UserError("Only the owner can activate or deactivate teachers.");
-  if (actorId === targetId) throw new UserError("You cannot change your own status.");
+  if (actor?.role !== "OWNER") throw new UserError("Only the owner can turn teachers' access on or off.");
+  if (actorId === targetId) throw new UserError("You can't change your own access.");
   const target = await db.user.findFirst({
     where: { id: targetId, role: "TEACHER" },
     select: { id: true, teacherProfile: { select: { role: true } } },
   });
   if (!target) throw new UserError("Teacher not found.");
-  if (target.teacherProfile?.role === "OWNER") throw new UserError("The owner account cannot be deactivated.");
+  if (target.teacherProfile?.role === "OWNER") throw new UserError("The owner's access can't be turned off.");
   await db.$transaction(async (tx) => {
     await tx.user.update({ where: { id: targetId }, data: { status: active ? "ACTIVE" : "DISABLED" } });
     if (!active) await tx.session.updateMany({ where: { userId: targetId, revokedAt: null }, data: { revokedAt: new Date() } });

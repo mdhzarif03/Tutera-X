@@ -13,7 +13,7 @@ const STATE: Record<string, { label: string; tone: "good" | "warn" | "bad" | "ne
   PAID: { label: "Paid", tone: "good" },
   PARTIAL: { label: "Part paid", tone: "info" },
   UNPAID: { label: "Unpaid", tone: "warn" },
-  OVERDUE: { label: "Overdue", tone: "bad" },
+  OVERDUE: { label: "Past due", tone: "bad" },
   NO_CHARGES: { label: "No fee yet", tone: "neutral" },
 };
 
@@ -28,9 +28,8 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader
-        eyebrow="Fees"
         title="Payments"
-        description="Record a payment straight from a student's row. The amount is filled in with what they owe."
+        description="Record a payment from any student's row. The amount is filled in for you."
       />
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
 
@@ -39,8 +38,8 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
         <Stat label="Collected so far" tone="good" icon={<Banknote className="h-4 w-4" aria-hidden="true" />} value={formatTaka(totalCollected)} />
         <Card className="flex flex-col justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Start of the month</p>
-            <p className="mt-2 text-sm text-slate-600">Add everyone&apos;s fee for {monthLabel(period)} in one step. Pressing it again is safe.</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">New month</p>
+            <p className="mt-2 text-sm text-slate-600">Add everyone&apos;s fee for {monthLabel(period)} in one step. Safe to press again.</p>
           </div>
           <form action={generateChargesAction} className="mt-4">
             <input type="hidden" name="period" value={period} />
@@ -55,7 +54,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       {rows.length === 0 ? (
         <EmptyState title="No active students yet" body="Students appear here as soon as they are added and active." />
       ) : (
-        <Card title="Who owes what" description="Use Record payment to add a payment for a student.">
+        <Card title="Who owes what" description="Press Record payment to add one.">
           <div className="-mx-5 overflow-x-auto">
             <table className="tbl">
               <thead>
@@ -111,7 +110,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                               <button type="submit" className="btn btn-primary w-full">
                                 Save payment
                               </button>
-                              <p className="text-center text-xs text-slate-500">Dated today. Click Record payment again to close.</p>
+                              <p className="text-center text-xs text-slate-500">Saved with today&apos;s date.</p>
                             </form>
                           </div>
                         </details>

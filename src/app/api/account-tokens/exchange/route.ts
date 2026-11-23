@@ -38,7 +38,7 @@ export async function POST(request: Request): Promise<Response> {
       {
         error:
           kind === "activation"
-            ? "This activation link has expired or was already used. Ask your teacher for a new one."
+            ? "This welcome link has expired or was already used. Ask your teacher for a new one."
             : "This reset link has expired or was already used. Request a new one.",
       },
       { status: 404 },

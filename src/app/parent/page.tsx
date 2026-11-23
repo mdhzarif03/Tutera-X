@@ -16,7 +16,7 @@ export default async function ParentHome({ searchParams }: { searchParams: Promi
     return (
       <>
         <PageHeader title={`Welcome, ${guardian.name}`} />
-        <EmptyState title="No linked children yet" body="Your child's teacher links your account to their record. Once that's done, their attendance, results and fees appear here." />
+        <EmptyState title="No linked children yet" body="Your child's teacher will connect your account. Then you'll see their attendance, results and fees here." />
       </>
     );
   }
@@ -30,7 +30,7 @@ export default async function ParentHome({ searchParams }: { searchParams: Promi
     <>
       <PageHeader
         title={selected.user.name}
-        description={`${selected.className} · ${selected.institution}. You are viewing read-only information.`}
+        description={`${selected.className} · ${selected.institution}. You can view everything here. Changes are made by the teacher.`}
       />
       {children.length > 1 ? (
         <nav aria-label="Children" className="mb-6 flex flex-wrap gap-2">

@@ -55,7 +55,7 @@ export default async function BatchPage({
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <Card title="Students" description="Removing a student keeps their attendance and results.">
+          <Card title="Students" description="They keep their past attendance and results.">
             {batch.members.length === 0 ? (
               <EmptyState title="No students in this batch" body="Add existing students from the list on the right." />
             ) : (
@@ -82,7 +82,7 @@ export default async function BatchPage({
             )}
           </Card>
 
-          <Card title="Class times" description="Used for your reference and shown to students.">
+          <Card title="Class times" description="Shown to students and parents.">
             {batch.schedules.length === 0 ? (
               <p className="text-sm text-slate-600">No class times yet.</p>
             ) : (

@@ -38,7 +38,7 @@ export function DashboardOverview({ data, basePath }: { data: StudentDashboardDa
           icon={<Award className="h-4 w-4" aria-hidden="true" />}
           tone="brand"
           value={latest ? (latest.absent ? "Absent" : `${latest.percentage}%`) : "—"}
-          hint={latest?.name ?? "Published results appear here"}
+          hint={latest?.name ?? "Your results will show here"}
         />
         <Stat
           label="Upcoming exams"
@@ -48,18 +48,18 @@ export function DashboardOverview({ data, basePath }: { data: StudentDashboardDa
           hint={data.upcoming.length ? "Scheduled ahead" : "Nothing scheduled"}
         />
         <Stat
-          label="Balance due"
+          label="Still to pay"
           icon={<Wallet className="h-4 w-4" aria-hidden="true" />}
           tone={balance > 0 ? "warn" : "good"}
           value={formatTaka(Math.max(0, balance))}
-          hint={balance <= 0 ? "All paid up" : "Outstanding balance"}
+          hint={balance <= 0 ? "All paid up" : "Amount to pay"}
         />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card title="Performance" description="Percentage in recent published exams" className="lg:col-span-2" icon={<Award className="h-4 w-4" aria-hidden="true" />}>
+        <Card title="Performance" description="Your scores in recent exams" className="lg:col-span-2" icon={<Award className="h-4 w-4" aria-hidden="true" />}>
           {chart.length === 0 ? (
-            <EmptyState title="No published results yet" body="When results are published, the performance graph appears here." />
+            <EmptyState title="No published results yet" body="Your scores will appear here after your teacher shares them." />
           ) : (
             <>
               <Bars items={chart} />
@@ -125,7 +125,7 @@ export function DashboardOverview({ data, basePath }: { data: StudentDashboardDa
 
           <Card title="Batches" icon={<Layers className="h-4 w-4" aria-hidden="true" />}>
             {data.batches.length === 0 ? (
-              <p className="text-sm text-slate-500">Not enrolled in a batch yet.</p>
+              <p className="text-sm text-slate-500">Not in a class yet.</p>
             ) : (
               <ul className="space-y-3">
                 {data.batches.map((b) => (
@@ -148,7 +148,7 @@ export function DashboardOverview({ data, basePath }: { data: StudentDashboardDa
 
         <Card title="Recent attendance" description="Latest 30 recorded days" className="lg:col-span-3" icon={<CalendarCheck className="h-4 w-4" aria-hidden="true" />}>
           {data.attendance.rows.length === 0 ? (
-            <p className="text-sm text-slate-500">Attendance appears here once it is recorded.</p>
+            <p className="text-sm text-slate-500">Your attendance will show here.</p>
           ) : (
             <div className="-mx-5 overflow-x-auto">
               <table className="tbl">

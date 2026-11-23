@@ -11,7 +11,7 @@ import { revokeAllSessions } from "@/lib/auth/session";
 import { queueSms } from "@/lib/sms/service";
 import { render, templates } from "@/lib/sms/templates";
 
-const GENERIC_FAILURE = "Invalid username, phone number, email or password.";
+const GENERIC_FAILURE = "We couldn't sign you in. Check your details and try again.";
 const MAX_FAILURES = 5;
 const LOCK_MINUTES = 15;
 
@@ -37,12 +37,12 @@ export async function loginWithPassword(identifier: string, password: string): P
   });
   if (!user || !user.passwordHash || user.deletedAt || user.status === "DISABLED") throw new UserError(GENERIC_FAILURE);
   if (user.status === "PENDING_ACTIVATION") {
-    throw new UserError("Activate your account first using the link we sent you by SMS.");
+    throw new UserError("Please set your password first, using the welcome link we texted you.");
   }
 
   const now = new Date();
   if (user.lockedUntil && user.lockedUntil > now) {
-    throw new UserError(`Too many failed attempts. Try again in ${LOCK_MINUTES} minutes.`);
+    throw new UserError(`Too many tries. Please wait ${LOCK_MINUTES} minutes and try again.`);
   }
 
   const ok = await verifyPassword(user.passwordHash, password);
@@ -73,10 +73,10 @@ export async function activateAccount(token: string, password: string): Promise<
     include: { user: { select: { id: true, role: true, status: true } } },
   });
   if (!record || record.usedAt || record.expiresAt < new Date()) {
-    throw new UserError("This activation link is invalid or has expired. Ask your teacher to send a new one.");
+    throw new UserError("This welcome link is no longer valid. Ask your teacher to send a new one.");
   }
   if (record.user.status !== "PENDING_ACTIVATION") {
-    throw new UserError("This account is already active. Sign in instead.");
+    throw new UserError("This account is ready. Please sign in.");
   }
 
   const passwordHash = await hashPassword(password);
@@ -128,7 +128,7 @@ export async function resetPassword(token: string, password: string): Promise<vo
   assertPasswordPolicy(password);
   const record = await db.passwordResetToken.findUnique({ where: { tokenHash: sha256(token) } });
   if (!record || record.usedAt || record.expiresAt < new Date()) {
-    throw new UserError("This reset link is invalid or has expired. Request a new one.");
+    throw new UserError("This link is no longer valid. Request a new one.");
   }
   const passwordHash = await hashPassword(password);
   await db.$transaction(async (tx) => {
@@ -143,7 +143,7 @@ export async function changePassword(userId: string, current: string, next: stri
   assertPasswordPolicy(next);
   const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { passwordHash: true } });
   if (!user.passwordHash || !(await verifyPassword(user.passwordHash, current))) {
-    throw new UserError("The current password is incorrect.");
+    throw new UserError("Your current password isn't right.");
   }
   const passwordHash = await hashPassword(next);
   await db.$transaction(async (tx) => {

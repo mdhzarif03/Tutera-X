@@ -30,11 +30,11 @@ export function AccountTokenExchange({ kind }: { kind: "activation" | "reset" })
           return;
         }
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setMessage(data.error ?? "This link could not be opened.");
+        setMessage(data.error ?? "This link couldn't be opened.");
         setState("error");
       })
       .catch(() => {
-        setMessage("Could not reach the server. Reload the page to try again.");
+        setMessage("We couldn't connect. Please refresh and try again.");
         setState("error");
       });
   }, [kind]);
@@ -43,7 +43,7 @@ export function AccountTokenExchange({ kind }: { kind: "activation" | "reset" })
   if (state === "missing") {
     return (
       <p className="text-sm text-slate-600">
-        Open the link from your SMS. It contains the code needed to continue.
+        Open the link from your text message to continue.
       </p>
     );
   }

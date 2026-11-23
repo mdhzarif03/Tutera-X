@@ -57,11 +57,11 @@ export default async function StudentPage({
     <>
       <PageHeader
         title={s.user.name}
-        description={`${s.className} · ${s.institution} · ${s.version} · username ${s.user.username ?? "—"}`}
+        description={`${s.className} · ${s.institution} · ${s.version} · login ID ${s.user.username ?? "—"}`}
         actions={
           <>
             <Badge tone={isArchived ? "neutral" : s.user.status === "ACTIVE" ? "good" : "warn"}>
-              {isArchived ? "archived" : pending ? "awaiting activation" : s.user.status.toLowerCase()}
+              {isArchived ? "archived" : pending ? "not joined yet" : s.user.status.toLowerCase()}
             </Badge>
           </>
         }
@@ -70,24 +70,24 @@ export default async function StudentPage({
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <Card title="Profile" description="Changes apply to future messages. Past messages are not edited.">
+          <Card title="Profile" description="Changes apply from now on.">
             <form action={updateStudentAction} className="grid gap-4 sm:grid-cols-2">
               <input type="hidden" name="studentId" value={id} />
               <Field label="Student name" htmlFor="name"><input id="name" name="name" required defaultValue={s.user.name} className="input" /></Field>
               <Field label="Student phone (optional)" htmlFor="phone"><input id="phone" name="phone" defaultValue={s.user.phoneE164 ?? ""} className="input" /></Field>
-              <Field label="Guardian name" htmlFor="guardianName"><input id="guardianName" name="guardianName" required defaultValue={s.guardian.name} className="input" /></Field>
-              <Field label="Guardian phone" htmlFor="guardianPhone"><input id="guardianPhone" name="guardianPhone" required defaultValue={s.guardian.phoneE164} className="input" /></Field>
+              <Field label="Parent's name" htmlFor="guardianName"><input id="guardianName" name="guardianName" required defaultValue={s.guardian.name} className="input" /></Field>
+              <Field label="Parent's phone" htmlFor="guardianPhone"><input id="guardianPhone" name="guardianPhone" required defaultValue={s.guardian.phoneE164} className="input" /></Field>
               <Field label="Class" htmlFor="className"><input id="className" name="className" required defaultValue={s.className} className="input" /></Field>
-              <Field label="Institution" htmlFor="institution"><input id="institution" name="institution" required defaultValue={s.institution} className="input" /></Field>
-              <Field label="Version / medium" htmlFor="version"><input id="version" name="version" required defaultValue={s.version} className="input" /></Field>
-              <Field label="Monthly tuition (৳)" htmlFor="monthlyFee"><input id="monthlyFee" name="monthlyFee" type="number" min={0} step="0.01" required defaultValue={num(s.monthlyFee)} className="input" /></Field>
+              <Field label="School or institute" htmlFor="institution"><input id="institution" name="institution" required defaultValue={s.institution} className="input" /></Field>
+              <Field label="Medium" htmlFor="version"><input id="version" name="version" required defaultValue={s.version} className="input" /></Field>
+              <Field label="Monthly fee (৳)" htmlFor="monthlyFee"><input id="monthlyFee" name="monthlyFee" type="number" min={0} step="0.01" required defaultValue={num(s.monthlyFee)} className="input" /></Field>
               <div className="sm:col-span-2"><button className="btn btn-primary" type="submit">Save changes</button></div>
             </form>
           </Card>
 
-          <Card title="Attendance" description={attendance.percentage === null ? "No attendance recorded yet." : `${attendance.percentage}% attended (present or late; excused days excluded)`}>
+          <Card title="Attendance" description={attendance.percentage === null ? "No attendance recorded yet." : `${attendance.percentage}% of days attended. Excused days aren't counted.`}>
             {attendance.rows.length === 0 ? (
-              <p className="text-sm text-slate-600">Attendance you record appears here.</p>
+              <p className="text-sm text-slate-600">Attendance you record will show here.</p>
             ) : (
               <div className="-mx-4 overflow-x-auto sm:-mx-5">
                 <table className="tbl">
@@ -106,9 +106,9 @@ export default async function StudentPage({
             )}
           </Card>
 
-          <Card title="Exam results" description="Published results only">
+          <Card title="Exam results" description="Results shared with the student">
             {results.length === 0 ? (
-              <p className="text-sm text-slate-600">No published results yet.</p>
+              <p className="text-sm text-slate-600">No results shared yet.</p>
             ) : (
               <table className="tbl">
                 <thead><tr><th>Exam</th><th>Date</th><th className="text-right">Marks</th><th className="text-right">%</th></tr></thead>
@@ -130,21 +130,21 @@ export default async function StudentPage({
             )}
           </Card>
 
-          <Card title="Fees and payments" description={balance ? `Balance: ${formatTaka(balance.balance)}` : undefined}>
+          <Card title="Payments" description={balance ? `Balance: ${formatTaka(balance.balance)}` : undefined}>
             <div className="mb-5 grid gap-4 md:grid-cols-2">
               <form action={addAdjustmentAction} className="grid gap-3 rounded-lg bg-slate-50 p-4">
-                <p className="text-sm font-medium text-slate-900">Add an adjustment</p>
+                <p className="text-sm font-medium text-slate-900">Correct the balance</p>
                 <input type="hidden" name="studentId" value={id} />
-                <input name="amount" type="number" step="0.01" required placeholder="Amount (negative to reduce)" className="input" aria-label="Adjustment amount" />
-                <input name="reason" required maxLength={200} placeholder="Reason" className="input" aria-label="Adjustment reason" />
-                <button className="btn btn-secondary btn-sm justify-self-start" type="submit">Record adjustment</button>
+                <input name="amount" type="number" step="0.01" required placeholder="Amount (minus to reduce)" className="input" aria-label="Adjustment amount" />
+                <input name="reason" required maxLength={200} placeholder="Reason for the change" className="input" aria-label="Adjustment reason" />
+                <button className="btn btn-secondary btn-sm justify-self-start" type="submit">Save change</button>
               </form>
               <div className="rounded-lg bg-slate-50 p-4 text-sm">
-                <p className="font-medium text-slate-900">Ledger summary</p>
+                <p className="font-medium text-slate-900">Summary</p>
                 <dl className="mt-2 grid grid-cols-2 gap-y-1 text-slate-600">
                   <dt>Charged</dt><dd className="text-right tabular-nums">{formatTaka(balance?.charged ?? 0)}</dd>
                   <dt>Paid</dt><dd className="text-right tabular-nums">{formatTaka(balance?.paid ?? 0)}</dd>
-                  <dt>Adjusted</dt><dd className="text-right tabular-nums">{formatTaka(balance?.adjusted ?? 0)}</dd>
+                  <dt>Changes</dt><dd className="text-right tabular-nums">{formatTaka(balance?.adjusted ?? 0)}</dd>
                   <dt className="font-medium text-slate-900">Balance</dt><dd className="text-right font-medium tabular-nums text-slate-900">{formatTaka(balance?.balance ?? 0)}</dd>
                 </dl>
               </div>
@@ -156,7 +156,7 @@ export default async function StudentPage({
                   {[
                     ...ledger.payments.map((p) => ({ key: `p${p.id}`, date: p.paidOn, label: `Payment · ${p.method.toLowerCase().replace("_", " ")}${p.forPeriod ? ` · ${p.forPeriod}` : ""}`, amount: -num(p.amount) })),
                     ...ledger.charges.map((c) => ({ key: `c${c.id}`, date: new Date(`${c.period}-01T00:00:00Z`), label: `Monthly fee · ${c.period}`, amount: num(c.amountDue) })),
-                    ...ledger.adjustments.map((a) => ({ key: `a${a.id}`, date: a.createdAt, label: `Adjustment · ${a.reason}`, amount: num(a.amount) })),
+                    ...ledger.adjustments.map((a) => ({ key: `a${a.id}`, date: a.createdAt, label: `Change · ${a.reason}`, amount: num(a.amount) })),
                   ]
                     .sort((x, y) => y.date.getTime() - x.date.getTime())
                     .slice(0, 40)
@@ -177,30 +177,30 @@ export default async function StudentPage({
           <Card title="Access">
             <div className="space-y-4 text-sm">
               <div>
-                <p className="font-medium text-slate-900">Student login</p>
-                <p className="text-slate-600">{pending ? "Activation link sent. The student has not set a password yet." : "Active."}</p>
+                <p className="font-medium text-slate-900">Student account</p>
+                <p className="text-slate-600">{pending ? "Welcome link sent. Waiting for them to join." : "Active."}</p>
                 {pending ? (
                   <form action={resendActivationAction} className="mt-2">
                     <input type="hidden" name="studentId" value={id} />
-                    <button className="btn btn-secondary btn-sm" type="submit">Send a new activation link</button>
+                    <button className="btn btn-secondary btn-sm" type="submit">Send a new welcome link</button>
                   </form>
                 ) : null}
               </div>
               <div>
-                <p className="font-medium text-slate-900">Parent login</p>
+                <p className="font-medium text-slate-900">Parent account</p>
                 {hasParentLogin ? (
                   <p className="text-slate-600">Created for {s.guardian.name} (username {s.guardian.parentUser?.user.username ?? "—"}).</p>
                 ) : (
                   <form action={createParentLoginAction} className="mt-2">
                     <input type="hidden" name="studentId" value={id} />
                     <p className="mb-2 text-slate-600">The guardian can view attendance, results and fees. Activation is sent to {s.guardian.phoneE164}.</p>
-                    <button className="btn btn-secondary btn-sm" type="submit">Create parent login</button>
+                    <button className="btn btn-secondary btn-sm" type="submit">Create parent account</button>
                   </form>
                 )}
               </div>
               <div>
                 <p className="font-medium text-slate-900">Archive</p>
-                <p className="mb-2 text-slate-600">Archived students cannot sign in. Their history is kept.</p>
+                <p className="mb-2 text-slate-600">Archived students can't sign in. Their records are kept.</p>
                 <form action={setStudentArchivedAction}>
                   <input type="hidden" name="studentId" value={id} />
                   <input type="hidden" name="archived" value={isArchived ? "0" : "1"} />
@@ -208,12 +208,12 @@ export default async function StudentPage({
                 </form>
                 <div className="mt-4 border-t border-slate-100 pt-4">
                   <p className="mb-2 font-semibold text-slate-900">Delete</p>
-                  <p className="mb-3 text-slate-600">Removes the student for good when they have no attendance, fees, results or parent login. Otherwise they are archived.</p>
+                  <p className="mb-3 text-slate-600">Deletes the student only when nothing is recorded for them. Otherwise they're moved to the archive.</p>
                   <ConfirmAction
                     action={deleteStudentAction}
                     hidden={{ studentId: id }}
                     label="Delete student"
-                    question={`Delete ${s.user.name}? This cannot be undone.`}
+                    question={`Delete ${s.user.name}? This can't be undone.`}
                     confirmLabel="Yes, delete"
                   />
                 </div>
@@ -223,7 +223,7 @@ export default async function StudentPage({
 
           <Card title="Batches">
             {memberships.length === 0 ? (
-              <p className="text-sm text-slate-600">Not in any batch yet.</p>
+              <p className="text-sm text-slate-600">Not in a batch yet.</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {memberships.map((m) => (
@@ -236,7 +236,7 @@ export default async function StudentPage({
             )}
           </Card>
 
-          <Card title="Recent SMS">
+          <Card title="Recent messages">
             {recentSms.length === 0 ? (
               <p className="text-sm text-slate-600">No messages yet.</p>
             ) : (

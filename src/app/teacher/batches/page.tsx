@@ -15,7 +15,7 @@ export default async function BatchesPage({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <PageHeader title="Batches" description="Groups of students who attend the same classes, with their own schedule and attendance." />
+      <PageHeader title="Batches" description="Groups of students who learn together." />
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -30,7 +30,7 @@ export default async function BatchesPage({ searchParams }: { searchParams: Prom
 
         <Card title="Active batches" className="lg:col-span-2" description={`${active.length} batch${active.length === 1 ? "" : "es"}`}>
           {active.length === 0 ? (
-            <EmptyState title="No batches yet" body="Create a batch, then add students to it. Attendance and bulk messages work per batch." />
+            <EmptyState title="No batches yet" body="Create a batch, then add students. Attendance and messages can go to a whole batch." />
           ) : (
             <div className="-mx-4 overflow-x-auto sm:-mx-5">
               <table className="tbl">

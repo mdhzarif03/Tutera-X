@@ -12,12 +12,12 @@ export default async function StudentPayments() {
   const b = data.balance;
   return (
     <>
-      <PageHeader title="Payments" description="Your tuition, payments and balance. Contact your teacher about any question." />
+      <PageHeader title="Payments" description="Your fees and payments. Ask your teacher if anything looks wrong." />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Monthly tuition" value={formatTaka(num(data.profile.monthlyFee))} />
-        <Stat label="Total charged" value={formatTaka(b?.charged ?? 0)} />
+        <Stat label="Monthly fee" value={formatTaka(num(data.profile.monthlyFee))} />
+        <Stat label="Fees so far" value={formatTaka(b?.charged ?? 0)} />
         <Stat label="Paid" value={formatTaka(b?.paid ?? 0)} />
-        <Stat label="Balance due" value={formatTaka(Math.max(0, b?.balance ?? 0))} hint={b?.state === "OVERDUE" ? "Overdue" : undefined} />
+        <Stat label="Still to pay" value={formatTaka(Math.max(0, b?.balance ?? 0))} hint={b?.state === "OVERDUE" ? "Past due" : undefined} />
       </div>
       <div className="mt-6">
         <Card title="Payment history">

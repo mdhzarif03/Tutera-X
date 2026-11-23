@@ -51,18 +51,18 @@ export default async function TeacherOverview() {
   // Only things that need a decision today. Each links to where it is fixed.
   const attention: { tone: Tone; text: string; href: string; cta: string }[] = [];
   if (o.allowance && o.allowance.overdrawn > 0) {
-    attention.push({ tone: "rose", text: `SMS allowance is overdrawn by ${o.allowance.overdrawn} credits. Sending is paused.`, href: "/teacher/sms", cta: "Review SMS" });
+    attention.push({ tone: "rose", text: `You've used more message credits than your limit. Messages are on hold until more are added.`, href: "/teacher/sms", cta: "See messages" });
   } else if (o.allowance && o.allowance.remaining === 0) {
-    attention.push({ tone: "amber", text: "No SMS credits left. Guardian notices are skipped until credits are added.", href: "/teacher/sms", cta: "Review SMS" });
+    attention.push({ tone: "amber", text: "You're out of message credits, so parent notices are paused. Ask the owner to add more.", href: "/teacher/sms", cta: "See messages" });
   }
   if (o.outstanding > 0) {
-    attention.push({ tone: "amber", text: `${formatTaka(o.outstanding)} is still to be collected from students.`, href: "/teacher/payments", cta: "Record payments" });
+    attention.push({ tone: "amber", text: `${formatTaka(o.outstanding)} is still to collect from students.`, href: "/teacher/payments", cta: "Record payments" });
   }
   if (failed > 0) {
-    attention.push({ tone: "rose", text: `${failed} recent message${failed === 1 ? " has" : "s have"} failed to send.`, href: "/teacher/sms", cta: "See messages" });
+    attention.push({ tone: "rose", text: `${failed} message${failed === 1 ? " could" : "s could"} not be sent.`, href: "/teacher/sms", cta: "See messages" });
   }
   if (o.upcomingExams.length > 0 && o.activeStudents > 0) {
-    attention.push({ tone: "sky", text: `${o.upcomingExams.length} exam${o.upcomingExams.length === 1 ? "" : "s"} in the next two weeks.`, href: "/teacher/exams", cta: "View exams" });
+    attention.push({ tone: "sky", text: `${o.upcomingExams.length} exam${o.upcomingExams.length === 1 ? "" : "s"} coming up in the next two weeks.`, href: "/teacher/exams", cta: "View exams" });
   }
 
   return (
@@ -75,7 +75,7 @@ export default async function TeacherOverview() {
           </h1>
           <p className="mt-2 text-base text-slate-500">
             {absent > 0
-              ? `${absent} student${absent === 1 ? " is" : "s are"} absent today. Guardians have been told.`
+              ? `${absent} student${absent === 1 ? " is" : "s are"} absent today. Their parents have been let know.`
               : marked > 0
                 ? `${marked} student${marked === 1 ? "" : "s"} marked today. No absences so far.`
                 : "Nothing marked yet today. Start with the register."}
@@ -103,11 +103,11 @@ export default async function TeacherOverview() {
           tone="emerald"
           progress={marked > 0 ? Math.round((present / marked) * 100) : undefined}
         />
-        <Kpi label="To collect" value={formatTaka(o.outstanding)} hint="Across active students" icon={<Wallet className="h-5 w-5" aria-hidden="true" />} tone={o.outstanding > 0 ? "amber" : "emerald"} />
+        <Kpi label="Still to collect" value={formatTaka(o.outstanding)} hint="Across all students" icon={<Wallet className="h-5 w-5" aria-hidden="true" />} tone={o.outstanding > 0 ? "amber" : "emerald"} />
         <Kpi
-          label="SMS credits"
+          label="Messages left"
           value={o.allowance ? o.allowance.remaining.toLocaleString("en-US") : "0"}
-          hint={o.allowance ? "Your allowance remaining" : "No allowance yet"}
+          hint={o.allowance ? "Message credits you have left" : "Not set up yet"}
           icon={<MessageSquare className="h-5 w-5" aria-hidden="true" />}
           tone="sky"
         />
@@ -118,17 +118,17 @@ export default async function TeacherOverview() {
           <div className="mb-5 flex items-center justify-between">
             <div>
               <h2 className="text-base font-semibold text-slate-900">Upcoming exams</h2>
-              <p className="text-sm text-slate-500">The next two weeks</p>
+              <p className="text-sm text-slate-500">Next two weeks</p>
             </div>
             <Link href="/teacher/exams" className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
               All exams <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
           {o.upcomingExams.length === 0 ? (
-            <EmptyState title="No exams in the next two weeks" body="Schedule an exam and students are notified by SMS straight away." icon={<GraduationCap className="h-6 w-6" aria-hidden="true" />}>
+            <EmptyState title="No exams coming up" body="When you add an exam, students get a text straight away." icon={<GraduationCap className="h-6 w-6" aria-hidden="true" />}>
               <Link className="btn btn-primary btn-sm" href="/teacher/exams">
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                Schedule an exam
+                Add an exam
               </Link>
             </EmptyState>
           ) : (
@@ -160,12 +160,12 @@ export default async function TeacherOverview() {
         </div>
 
         <div className="card p-6">
-          <h2 className="text-base font-semibold text-slate-900">Needs your attention</h2>
-          <p className="mb-5 text-sm text-slate-500">Only the things that need a decision.</p>
+          <h2 className="text-base font-semibold text-slate-900">To check today</h2>
+          <p className="mb-5 text-sm text-slate-500">Only what needs you today.</p>
           {attention.length === 0 ? (
             <div className="flex items-start gap-3 rounded-2xl bg-emerald-50 p-4 ring-1 ring-inset ring-emerald-100">
               <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
-              <p className="text-sm font-medium text-emerald-900">All clear. Nothing needs you right now.</p>
+              <p className="text-sm font-medium text-emerald-900">All done for today. Nothing needs you right now.</p>
             </div>
           ) : (
             <ul className="space-y-3">
@@ -218,11 +218,11 @@ export default async function TeacherOverview() {
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-base font-semibold text-slate-900">Recent messages</h2>
             <Link href="/teacher/sms" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
-              Open SMS
+              Open messages
             </Link>
           </div>
           {o.recentMessages.length === 0 ? (
-            <p className="text-sm text-slate-500">Messages you send and automatic notices appear here.</p>
+            <p className="text-sm text-slate-500">Messages you send will appear here.</p>
           ) : (
             <ul className="divide-y divide-slate-100">
               {o.recentMessages.map((m) => (

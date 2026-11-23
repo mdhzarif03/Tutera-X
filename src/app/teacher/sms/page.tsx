@@ -22,6 +22,22 @@ const STATUS_TONE: Record<string, "good" | "bad" | "warn" | "neutral" | "info"> 
   CANCELLED: "neutral",
 };
 
+const STATUS_WORDS: Record<string, string> = {
+  QUEUED: "waiting",
+  SUBMITTING: "sending",
+  ACCEPTED: "sent",
+  SENT: "sent",
+  FAILED: "not sent",
+  SKIPPED: "skipped",
+  CANCELLED: "cancelled",
+};
+
+const SKIP_WORDS: Record<string, string> = {
+  allowance_exhausted: "no credits left",
+  live_sms_disabled: "test mode",
+  content_rejected: "message not allowed",
+};
+
 export default async function SmsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const t = await requireRole("TEACHER");
   const sp = await searchParams;
@@ -35,20 +51,20 @@ export default async function SmsPage({ searchParams }: { searchParams: Promise<
     allowanceSummary(t.id),
     allowanceLedger(t.id, 8),
   ]);
-  const queued = counts.QUEUED ?? 0;
+  const waiting = counts.QUEUED ?? 0;
   const failed = counts.FAILED ?? 0;
   const statusMsg =
     balance.status === "not_configured"
-      ? "The SMS provider is not configured on this server."
+      ? "Messages aren't set up on this server yet. Ask your administrator."
       : balance.status === "ok"
         ? null
         : balance.status === "auth_failed"
-          ? "The SMS provider rejected the API key. Messages cannot be sent until an administrator fixes it."
-          : "The SMS provider could not be reached. The last known balance is shown.";
+          ? "Messages are paused. Ask your administrator to check the setup."
+          : "We couldn't reach the messaging service. The last known balance is shown.";
 
   return (
     <>
-      <PageHeader title="SMS and communication" description="Messages are sent to guardians and students. Each message shows its real status, and delivery is shown only when the network reports it." />
+      <PageHeader title="Messages" description="Send a message to students or parents. You'll see the cost before you send." />
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -56,7 +72,7 @@ export default async function SmsPage({ searchParams }: { searchParams: Promise<
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">SMS credits</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">{balance.credits === null ? "—" : balance.credits.toLocaleString("en-US")}</p>
           <p className="mt-1 text-xs text-slate-500">
-            {balance.asOf ? `Provider balance as of ${formatDateTime(balance.asOf)}` : "No balance fetched yet"}
+            {balance.asOf ? `Balance as of ${formatDateTime(balance.asOf)}` : "Not checked yet"}
             {balance.fetchedAt ? ` · checked ${formatDateTime(balance.fetchedAt)}` : ""}
           </p>
           {statusMsg ? <p className="mt-2 text-xs text-amber-800">{statusMsg}</p> : null}
@@ -65,28 +81,28 @@ export default async function SmsPage({ searchParams }: { searchParams: Promise<
           </form>
         </Card>
         <Card className="col-span-2 lg:col-span-1">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Your allowance</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Your credits</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">{allowance ? allowance.remaining.toLocaleString("en-US") : 0}</p>
-          <p className="mt-1 text-xs text-slate-500">{allowance ? `${allowance.allowance.toLocaleString("en-US")} granted · ${allowance.used.toLocaleString("en-US")} used · ${allowance.reserved.toLocaleString("en-US")} queued` : "No allowance set"}</p>
-          {allowance && allowance.overdrawn > 0 ? <p className="mt-1 text-xs font-medium text-rose-700">Overdrawn by {allowance.overdrawn}. Sending is paused until the owner adds credits.</p> : null}
+          <p className="mt-1 text-xs text-slate-500">{allowance ? `${allowance.allowance.toLocaleString("en-US")} total · ${allowance.used.toLocaleString("en-US")} used · ${allowance.reserved.toLocaleString("en-US")} waiting` : "Not set up yet"}</p>
+          {allowance && allowance.overdrawn > 0 ? <p className="mt-1 text-xs font-medium text-rose-700">You're over your limit. Messages are on hold until the owner adds credits.</p> : null}
           {ledger.length > 0 ? (
             <details className="mt-2 text-xs text-slate-600">
-              <summary className="cursor-pointer text-teal-700">Recent movements</summary>
+              <summary className="cursor-pointer text-teal-700">Recent activity</summary>
               <ul className="mt-2 space-y-1">
                 {ledger.map((e) => <li key={e.id}>{e.kind.toLowerCase()} {e.credits} · {e.createdAt.toLocaleDateString("en-GB", { timeZone: "Asia/Dhaka" })}</li>)}
               </ul>
             </details>
           ) : null}
         </Card>
-        <Stat label="Waiting to send" value={queued} hint="Queued or retrying" />
+        <Stat label="Waiting to send" value={waiting} hint="Waiting or retrying" />
         <Stat label="Failed" value={failed} hint="Needs attention" />
-        <Stat label="Sent to network" value={(counts.SENT ?? 0) + (counts.ACCEPTED ?? 0)} hint="Delivery is not reported on every route" />
+        <Stat label="Sent" value={(counts.SENT ?? 0) + (counts.ACCEPTED ?? 0)} hint="Sent successfully" />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <Card title="Send a message" className="lg:col-span-2" description="Use {name} for each student's name. Each recipient gets a personal copy with your name at the end.">
+        <Card title="Send a message" className="lg:col-span-2" description="Use {name} to add each student's name. Each parent gets a personal copy.">
           {students.rows.length === 0 ? (
-            <EmptyState title="No students to message" body="Add students first. Their guardians receive messages sent from here." />
+            <EmptyState title="No students to message" body="Add students first. Their parents receive messages sent from here." />
           ) : (
             <form action={sendMessageAction} className="grid gap-5">
               <fieldset className="grid gap-3">
@@ -115,36 +131,36 @@ export default async function SmsPage({ searchParams }: { searchParams: Promise<
 
               <label className="flex items-start gap-2 text-sm text-slate-700">
                 <input type="checkbox" name="confirm" value="yes" required className="mt-0.5 size-4 accent-teal-700" />
-                <span>I have checked the recipients and the message. It will be sent to each recipient's phone, and the cost is charged to the Tutera-X account.</span>
+                <span>I've checked the message and who will receive it.</span>
               </label>
-              <div className="flex flex-wrap gap-2"><button className="btn btn-secondary" type="submit" formAction={checkSendCostAction} formNoValidate>Check cost</button><button className="btn btn-primary" type="submit">Send message</button></div>
+              <div className="flex flex-wrap gap-2"><button className="btn btn-secondary" type="submit" formAction={checkSendCostAction} formNoValidate>See the cost</button><button className="btn btn-primary" type="submit">Send message</button></div>
             </form>
           )}
         </Card>
 
         <div className="space-y-6">
-          <Card title="Absence notices" description="Sent to the guardian when a student is marked absent.">
+          <Card title="Absence notices" description="Parents get a text when their child is marked absent.">
             <form action={toggleAbsenceSmsAction} className="flex items-center justify-between gap-3">
               <input type="hidden" name="enabled" value={profile.absenceSmsEnabled ? "0" : "1"} />
               <span className="text-sm">{profile.absenceSmsEnabled ? <Badge tone="good">On</Badge> : <Badge>Off</Badge>}</span>
               <button className="btn btn-secondary btn-sm" type="submit">Turn {profile.absenceSmsEnabled ? "off" : "on"}</button>
             </form>
           </Card>
-          <Card title="Message history" description="Latest 40 recipients">
+          <Card title="Sent messages" description="Latest 40">
             {history.length === 0 ? (
-              <p className="text-sm text-slate-600">Messages you send appear here with their status.</p>
+              <p className="text-sm text-slate-600">Messages you send will appear here.</p>
             ) : (
               <ul className="divide-y divide-slate-100 text-sm">
                 {history.map((h) => (
                   <li key={h.id} className="py-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-medium text-slate-900">{h.student?.user.name ?? h.phoneE164}</span>
-                      <Badge tone={STATUS_TONE[h.status] ?? "neutral"}>{h.status.toLowerCase()}</Badge>
+                      <Badge tone={STATUS_TONE[h.status] ?? "neutral"}>{STATUS_WORDS[h.status] ?? h.status.toLowerCase()}</Badge>
                     </div>
                     <p className="text-xs text-slate-500">
                       {h.smsMessage.purpose.replace(/_/g, " ").toLowerCase()} · {formatDateTime(h.createdAt)}
                       {h.deliveryStatus === "DELIVERED" ? " · delivered" : h.deliveryStatus === "UNDELIVERED" ? " · not delivered" : ""}
-                      {h.skipReason ? ` · ${h.skipReason.replace(/_/g, " ")}` : ""}
+                      {h.skipReason ? ` · ${SKIP_WORDS[h.skipReason] ?? "not sent"}` : ""}
                     </p>
                   </li>
                 ))}

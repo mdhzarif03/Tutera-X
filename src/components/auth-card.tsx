@@ -3,11 +3,11 @@ import { CalendarCheck, MessageSquare, ShieldCheck, Users, Wallet } from "lucide
 import { Logo } from "./logo";
 
 const FEATURES = [
-  { icon: Users, text: "Students, batches and guardians in one place" },
-  { icon: CalendarCheck, text: "Attendance that notifies families automatically" },
-  { icon: Wallet, text: "Fees, payments and balances you can trust" },
-  { icon: MessageSquare, text: "Messages with real credit estimates before you send" },
-  { icon: ShieldCheck, text: "Private accounts with single-use secure links" },
+  { icon: Users, text: "Students, classes and parents in one place" },
+  { icon: CalendarCheck, text: "Attendance that keeps parents informed" },
+  { icon: Wallet, text: "Fees and payments, all in one place" },
+  { icon: MessageSquare, text: "See what a message costs before you send it" },
+  { icon: ShieldCheck, text: "Private accounts and safe sign-in links" },
 ];
 
 export function AuthCard({ title, description, children }: { title: string; description?: string; children: ReactNode }) {

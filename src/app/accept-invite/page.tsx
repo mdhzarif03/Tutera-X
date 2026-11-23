@@ -13,7 +13,7 @@ export default async function AcceptInvitePage({ searchParams }: { searchParams:
   const hasInvite = Boolean(await readInviteCookie());
 
   return (
-    <AuthCard title="Join as a teacher" description="You have been invited to Tutera-X. Enter your name and choose a password.">
+    <AuthCard title="Join your team" description="You've been invited to join. Add your name and choose a password.">
       <Flash error={pick(sp, "error")} />
       {hasInvite ? (
         <form action={acceptInviteAction} className="space-y-4">
@@ -22,7 +22,7 @@ export default async function AcceptInvitePage({ searchParams }: { searchParams:
             <input id="name" name="name" required maxLength={120} autoComplete="name" className="input" />
           </div>
           <NewPasswordFields />
-          <button type="submit" className="btn btn-primary w-full">Create account</button>
+          <button type="submit" className="btn btn-primary w-full">Join</button>
         </form>
       ) : (
         <InviteExchange />
