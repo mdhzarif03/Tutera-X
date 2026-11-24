@@ -88,33 +88,3 @@ export function InstallMenuItem({ onDone }: { onDone?: () => void }) {
     </div>
   );
 }
-
-/** Standalone button for the sign-in page, which has no menu. */
-export function InstallAppButton({ className = "" }: { className?: string }) {
-  const { ready, installed, canPrompt, prompt, instructions } = useInstallApp();
-  const [help, setHelp] = useState(false);
-  if (!ready || installed) return null;
-
-  return (
-    <div className={`relative ${className}`}>
-      <button
-        type="button"
-        aria-label="Install Tutera-X app"
-        aria-expanded={help}
-        onClick={async () => {
-          if (canPrompt) await prompt();
-          else setHelp((v) => !v);
-        }}
-        className="btn btn-secondary btn-sm gap-1.5"
-      >
-        <Download className="h-4 w-4" aria-hidden="true" />
-        <span className="hidden sm:inline">Install app</span>
-      </button>
-      {help ? (
-        <p role="dialog" aria-label="How to install" className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl bg-white p-4 text-sm leading-relaxed text-slate-700 shadow-xl ring-1 ring-slate-200">
-          {instructions}
-        </p>
-      ) : null}
-    </div>
-  );
-}
