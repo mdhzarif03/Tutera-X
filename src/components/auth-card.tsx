@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { CalendarCheck, MessageSquare, ShieldCheck, Users, Wallet } from "lucide-react";
 import { Logo } from "./logo";
+import { InstallAppButton } from "./install-app-button";
 
 const FEATURES = [
   { icon: Users, text: "Students, classes and parents in one place" },
@@ -12,7 +13,8 @@ const FEATURES = [
 
 export function AuthCard({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
-    <main className="auth-bg flex min-h-dvh items-center justify-center px-4 py-10 sm:py-14">
+    <main className="auth-bg relative flex min-h-dvh items-center justify-center px-4 py-10 sm:py-14">
+      <InstallAppButton className="absolute right-4 top-4 z-10" />
       <div className="tx-enter grid w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl shadow-indigo-900/10 ring-1 ring-slate-200/80 md:grid-cols-2">
         <aside className="brand-panel relative hidden flex-col justify-between overflow-hidden p-10 text-white md:flex">
           <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />

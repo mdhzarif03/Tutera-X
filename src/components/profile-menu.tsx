@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, LogOut, Settings } from "lucide-react";
 import { logoutAction } from "@/actions/auth";
+import { InstallMenuItem } from "./install-app-button";
 
 /**
  * The account button in the top bar. Opens a panel with the signed-in name, the settings link,
@@ -76,6 +77,7 @@ export function ProfileMenu({
             </div>
           </div>
           <div className="my-1 h-px bg-slate-100" />
+          <InstallMenuItem onDone={() => setOpen(false)} />
           <Link
             role="menuitem"
             href={settingsHref}
