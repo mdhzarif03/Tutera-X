@@ -50,6 +50,7 @@ Migrations in order:
 
 - `20261122180000_init`: the initial schema. Applied or not, it must not be edited, because Prisma checksums applied migrations. `scripts/generate-initial-migration.py` refuses to overwrite it.
 - `20261124090000_student_group`: adds the student group (Science, Commerce, Humanities) for Class 9 to 12. It only adds a column, so existing data is unchanged.
+- `20261124100000_teacher_phone_invites`: adds phone-based teacher invitations and optional subject details. Existing email invitations remain usable.
 - `20261123090000_sms_recipient_student_fk`: adds the foreign key from `SmsRecipient.studentId` to `StudentProfile.userId`, which the `SmsRecipient.student` relation needs. It changes no data. Before adding the constraint it checks for recipients that point at missing students and stops with a clear error if it finds any. Running `npx prisma migrate deploy` against an existing database applies only this new migration.
 
 ## SMS pricing
@@ -149,6 +150,7 @@ Before deploying, run: `npm install`, `npx prisma generate`, `npx prisma validat
 - **Removing an absence mark** sends the parent a short correction text if they were told about the absence. Nothing is sent otherwise.
 - **Changing marks after results are shared** sends each affected parent a correction text. Shared results cannot be taken back.
 - **Password reset without a phone number:** the owner can create a reset link for a teacher on the Team page. The link works once and expires in 24 hours.
+- **Teacher onboarding:** new invitations are sent by SMS to the supplied phone number. Invitees set their name, optional subjects and institution, and password before joining. Phone-based teacher accounts sign in with that phone number. Previously sent email invitations remain valid.
 - **Balance check:** pages never wait for the messaging provider. The last known balance is shown and refreshed in the background. An explicit refresh still waits for the result.
 - **JavaScript:** invitation, welcome and reset links read their secret in the browser, so JavaScript must be on. Pages show a note if it is off.
 

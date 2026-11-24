@@ -137,6 +137,7 @@ model TeacherProfile {
   user            User        @relation(fields: [userId], references: [id], onDelete: Restrict)
   role            TeacherRole @default(TEACHER)
   institutionName String?
+  subjects        String?
   // Per-teacher SMS notification settings live here so they are versioned with the profile.
   absenceSmsEnabled Boolean   @default(true)
   // Per-teacher SMS allowance, in credits (1 credit = 1 segment). Separate from the shared Nishchit balance.
@@ -157,7 +158,8 @@ model TeacherProfile {
 
 model TeacherInvitation {
   id            String    @id @default(cuid())
-  email         String
+  email         String?
+  phoneE164     String?   @unique
   tokenHash     String    @unique          // SHA-256 of the raw token; raw token is never stored
   invitedById   String
   invitedBy     TeacherProfile @relation("InvitedBy", fields: [invitedById], references: [userId], onDelete: Restrict)

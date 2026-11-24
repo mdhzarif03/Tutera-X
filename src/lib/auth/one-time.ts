@@ -5,10 +5,8 @@ import { getEnv } from "@/lib/env";
 // without placing it in a URL. Each cookie is scoped to the single path that needs it.
 
 export const INVITE_COOKIE = "tx_invite";
-export const INVITE_REVEAL_COOKIE = "tx_invite_reveal";
 
 const INVITE_TTL_SECONDS = 15 * 60;
-const REVEAL_TTL_SECONDS = 5 * 60;
 
 function secure(): boolean {
   return getEnv().NODE_ENV === "production";
@@ -34,28 +32,6 @@ export async function readInviteCookie(): Promise<string | null> {
 export async function clearInviteCookie(): Promise<void> {
   const jar = await cookies();
   jar.delete({ name: INVITE_COOKIE, path: "/accept-invite" });
-}
-
-/** Lets the inviting owner see a freshly created link once. Path-scoped to the teachers page. */
-export async function setInviteRevealCookie(token: string): Promise<void> {
-  const jar = await cookies();
-  jar.set(INVITE_REVEAL_COOKIE, token, {
-    httpOnly: true,
-    secure: secure(),
-    sameSite: "strict",
-    path: "/teacher/teachers",
-    maxAge: REVEAL_TTL_SECONDS,
-  });
-}
-
-export async function readInviteRevealCookie(): Promise<string | null> {
-  const jar = await cookies();
-  return jar.get(INVITE_REVEAL_COOKIE)?.value ?? null;
-}
-
-export async function clearInviteRevealCookie(): Promise<void> {
-  const jar = await cookies();
-  jar.delete({ name: INVITE_REVEAL_COOKIE, path: "/teacher/teachers" });
 }
 
 // Activation and password-reset links. The token is in the URL fragment, exchanged for a cookie

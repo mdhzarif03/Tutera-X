@@ -18,7 +18,7 @@ import * as comms from "@/services/comms";
 import * as teachers from "@/services/teachers";
 import { refreshSmsBalance } from "@/services/comms";
 import { providerMode } from "@/lib/sms/nishchit";
-import { clearInviteRevealCookie, clearResetRevealCookie, setInviteRevealCookie, setResetRevealCookie } from "@/lib/auth/one-time";
+import { clearResetRevealCookie, setResetRevealCookie } from "@/lib/auth/one-time";
 
 async function teacher() {
   return requireRole("TEACHER");
@@ -289,20 +289,10 @@ export async function toggleAbsenceSmsAction(formData: FormData): Promise<void> 
 export async function inviteTeacherAction(formData: FormData): Promise<void> {
   const t = await teacher();
   return runAction("/teacher/teachers", async () => {
-    const token = await teachers.inviteTeacher(t.id, str(formData, "email"));
-    // The token goes into an httpOnly cookie, not the redirect URL, so it cannot leak through history or logs.
-    await setInviteRevealCookie(token);
-    return { message: "Invitation created. Send the link privately. It works once and expires in three days." };
+    await teachers.inviteTeacher(t.id, str(formData, "phone"));
+    return { message: "Invitation link queued by SMS. It works once and expires in three days." };
   });
 }
-
-export async function dismissInviteLinkAction(): Promise<void> {
-  await teacher();
-  await clearInviteRevealCookie();
-  redirect("/teacher/teachers");
-}
-
-
 
 export async function revokeInvitationAction(formData: FormData): Promise<void> {
   const t = await teacher();

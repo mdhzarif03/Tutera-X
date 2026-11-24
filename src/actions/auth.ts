@@ -100,6 +100,8 @@ export async function resetAction(formData: FormData): Promise<void> {
 export async function acceptInviteAction(formData: FormData): Promise<void> {
   const token = (await readInviteCookie()) ?? "";
   const name = str(formData, "name");
+  const subjects = str(formData, "subjects");
+  const institutionName = str(formData, "institutionName");
   const password = str(formData, "password");
   const confirm = str(formData, "confirm");
   let userId: string | null = null;
@@ -107,7 +109,7 @@ export async function acceptInviteAction(formData: FormData): Promise<void> {
   try {
     if (!token) throw new UserError("Open the invitation link again to continue.");
     if (password !== confirm) throw new UserError("The two passwords do not match.");
-    userId = await acceptInvitation(token, name, password);
+    userId = await acceptInvitation(token, name, subjects, institutionName, password);
   } catch (err) {
     error = errorText(err);
   }

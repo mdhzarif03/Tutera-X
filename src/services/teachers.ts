@@ -5,7 +5,10 @@ import { addHours } from "@/lib/dates";
 import { audit } from "@/lib/audit";
 import { getEnv } from "@/lib/env";
 import { assertPasswordPolicy, hashPassword } from "@/lib/auth/password";
-import { requireText } from "@/lib/validate";
+import { optionalText, requireText } from "@/lib/validate";
+import { normalizeBdPhone } from "@/lib/phone";
+import { queueSms } from "@/lib/sms/service";
+import { render, templates } from "@/lib/sms/templates";
 
 export async function listTeachers() {
   return db.user.findMany({
@@ -15,9 +18,10 @@ export async function listTeachers() {
       id: true,
       name: true,
       email: true,
+      phoneE164: true,
       status: true,
       lastLoginAt: true,
-      teacherProfile: { select: { role: true } },
+      teacherProfile: { select: { role: true, subjects: true, institutionName: true } },
     },
   });
 }
@@ -26,31 +30,49 @@ export async function listInvitations() {
   return db.teacherInvitation.findMany({
     where: { acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: "desc" },
-    select: { id: true, email: true, expiresAt: true, invitedById: true },
+    select: { id: true, email: true, phoneE164: true, expiresAt: true, invitedById: true },
   });
 }
 
-/** Creates an invitation and returns the raw token once. Only its hash is stored. */
-export async function inviteTeacher(actorId: string, emailRaw: string): Promise<string> {
-  const email = requireText(emailRaw, "Email", 254).toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new UserError("Enter a valid email address.");
-
-  const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
-  if (existing) throw new UserError("This email already has an account.");
+/** Creates an invitation and queues its one-time link to the teacher's phone. */
+export async function inviteTeacher(actorId: string, phoneRaw: string): Promise<void> {
+  const phoneE164 = normalizeBdPhone(requireText(phoneRaw, "Phone number", 20));
+  const existing = await db.user.findUnique({ where: { phoneE164 }, select: { id: true } });
+  if (existing) throw new UserError("This phone number already has an account.");
 
   const token = randomToken(32);
+  const tokenHash = sha256(token);
+  const now = new Date();
+  const expiresAt = addHours(now, 72);
   try {
     await db.$transaction(async (tx) => {
-      const inv = await tx.teacherInvitation.create({
-        data: { email, tokenHash: sha256(token), invitedById: actorId, expiresAt: addHours(new Date(), 72) },
+      const previous = await tx.teacherInvitation.findUnique({ where: { phoneE164 } });
+      if (previous && previous.acceptedAt === null && previous.revokedAt === null && previous.expiresAt > now) {
+        throw new UserError("An invitation was already sent to this phone number.");
+      }
+
+      const inv = previous
+        ? await tx.teacherInvitation.update({
+            where: { id: previous.id },
+            data: { email: null, tokenHash, invitedById: actorId, expiresAt, acceptedAt: null, revokedAt: null, createdAt: now },
+          })
+        : await tx.teacherInvitation.create({
+            data: { phoneE164, tokenHash, invitedById: actorId, expiresAt },
+          });
+      const body = render(templates.teacherInvitation, { link: inviteUrl(token) });
+      await queueSms(tx, {
+        purpose: "TEACHER_INVITATION",
+        dedupeKey: `teacher-invite:${inv.id}:${tokenHash}`,
+        teacherId: actorId,
+        template: templates.teacherInvitation,
+        recipients: [{ studentId: null, phone: phoneE164, body }],
       });
-      await audit(tx, { actorId, action: "teacher.invite", entityType: "invitation", entityId: inv.id, changes: { email } });
+      await audit(tx, { actorId, action: "teacher.invite", entityType: "invitation", entityId: inv.id, changes: { phoneE164 } });
     });
   } catch (err) {
-    if (isUniqueViolation(err)) throw new UserError("An invitation was already sent to this email.");
+    if (isUniqueViolation(err)) throw new UserError("An invitation was already sent to this phone number.");
     throw err;
   }
-  return token;
 }
 
 /**
@@ -67,13 +89,22 @@ export async function revokeInvitation(actorId: string, invitationId: string): P
   await db.teacherInvitation.update({ where: { id: inv.id }, data: { revokedAt: new Date() } });
 }
 
-export async function acceptInvitation(token: string, nameRaw: string, password: string): Promise<string> {
+export async function acceptInvitation(
+  token: string,
+  nameRaw: string,
+  subjectsRaw: string,
+  institutionNameRaw: string,
+  password: string,
+): Promise<string> {
   const name = requireText(nameRaw, "Name", 120);
+  const subjects = optionalText(subjectsRaw, 200);
+  const institutionName = optionalText(institutionNameRaw, 120);
   assertPasswordPolicy(password);
   const inv = await db.teacherInvitation.findUnique({ where: { tokenHash: sha256(token) } });
   if (!inv || inv.acceptedAt || inv.revokedAt || inv.expiresAt < new Date()) {
     throw new UserError("This link has expired or was already used.");
   }
+  if (!inv.email && !inv.phoneE164) throw new UserError("This invitation has no contact number.");
   const passwordHash = await hashPassword(password);
   try {
     return await db.$transaction(async (tx) => {
@@ -87,18 +118,27 @@ export async function acceptInvitation(token: string, nameRaw: string, password:
         data: {
           role: "TEACHER",
           email: inv.email,
+          phoneE164: inv.phoneE164,
           name,
           passwordHash,
           status: "ACTIVE",
-          teacherProfile: { create: { role: "TEACHER" } },
+          teacherProfile: { create: { role: "TEACHER", subjects, institutionName } },
         },
         select: { id: true },
       });
-      await audit(tx, { actorId: user.id, action: "teacher.joined", entityType: "user", entityId: user.id });
+      await audit(tx, {
+        actorId: user.id,
+        action: "teacher.joined",
+        entityType: "user",
+        entityId: user.id,
+        changes: { subjects, institutionName },
+      });
       return user.id;
     });
   } catch (err) {
-    if (isUniqueViolation(err)) throw new UserError("This email already has an account.");
+    if (isUniqueViolation(err)) {
+      throw new UserError(inv.phoneE164 ? "This phone number already has an account." : "This email already has an account.");
+    }
     throw err;
   }
 }

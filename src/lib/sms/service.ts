@@ -10,7 +10,7 @@ import { NishchitError, liveSendingAllowed, sendMessage } from "./nishchit";
 // The provider charges each accepted message and refunds failed ones.
 
 export const MAX_ATTEMPTS = 6;
-const SENSITIVE: ReadonlySet<SmsPurpose> = new Set(["ACCOUNT_ACTIVATION", "PASSWORD_RESET"]);
+const SENSITIVE: ReadonlySet<SmsPurpose> = new Set(["ACCOUNT_ACTIVATION", "TEACHER_INVITATION", "PASSWORD_RESET"]);
 const REDACTED = "[sensitive content, redacted after sending]";
 
 export interface QueueRecipient {

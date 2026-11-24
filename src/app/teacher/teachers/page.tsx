@@ -1,14 +1,13 @@
 import { requireRole } from "@/lib/auth/guards";
 import {
-  dismissInviteLinkAction,
   dismissResetLinkAction,
   inviteTeacherAction,
   issueTeacherResetAction,
   revokeInvitationAction,
   setTeacherActiveAction,
 } from "@/actions/teacher";
-import { inviteUrl, listInvitations, listTeachers, resetUrl } from "@/services/teachers";
-import { readInviteRevealCookie, readResetRevealCookie } from "@/lib/auth/one-time";
+import { listInvitations, listTeachers, resetUrl } from "@/services/teachers";
+import { readResetRevealCookie } from "@/lib/auth/one-time";
 import { Badge, Card, EmptyState, Field, Flash, PageHeader } from "@/components/ui";
 import { ConfirmAction } from "@/components/confirm-action";
 import { formatDateTime } from "@/lib/dates";
@@ -20,27 +19,16 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
   const t = await requireRole("TEACHER");
   const sp = await searchParams;
   const viewerIsOwner = t.teacherRole === "OWNER";
-  const [teachers, invitations, inviteToken, resetToken] = await Promise.all([
+  const [teachers, invitations, resetToken] = await Promise.all([
     listTeachers(),
     listInvitations(),
-    readInviteRevealCookie(),
     readResetRevealCookie(),
   ]);
 
   return (
     <>
-      <PageHeader title="Team" description="Invite a colleague with a link. The link works once and expires after three days." />
+      <PageHeader title="Team" description="Invite a colleague by phone. They receive a secure SMS link that expires after three days." />
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
-
-      {inviteToken ? (
-        <Card title="Send this link to your colleague" className="mb-6 border-teal-300">
-          <p className="mb-3 text-sm text-slate-600">Send it privately. It works once and expires in three days.</p>
-          <code className="block break-all rounded-md bg-slate-900 px-3 py-2 text-xs text-slate-100">{inviteUrl(inviteToken)}</code>
-          <form action={dismissInviteLinkAction} className="mt-3">
-            <button className="btn btn-secondary btn-sm" type="submit">Done</button>
-          </form>
-        </Card>
-      ) : null}
 
       {resetToken ? (
         <Card title="Send this reset link to the teacher" className="mb-6 border-teal-300">
@@ -58,10 +46,10 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
         <div className="space-y-6 lg:col-span-1">
           <Card title="Invite a teacher">
             <form action={inviteTeacherAction} className="grid gap-3">
-              <Field label="Email address" htmlFor="email">
-                <input id="email" name="email" type="email" required maxLength={254} className="input" />
+              <Field label="Phone number" htmlFor="phone" hint="A secure setup link will be sent by SMS.">
+                <input id="phone" name="phone" type="tel" required inputMode="tel" autoComplete="tel" maxLength={20} placeholder="01712345678" className="input" />
               </Field>
-              <button className="btn btn-primary" type="submit">Create invitation</button>
+              <button className="btn btn-primary" type="submit">Send invitation SMS</button>
             </form>
           </Card>
 
@@ -73,7 +61,7 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
                 {invitations.map((i) => (
                   <li key={i.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900">{i.email}</p>
+                      <p className="truncate font-medium text-slate-900">{i.phoneE164 ?? i.email}</p>
                       <p className="text-xs text-slate-500">Expires {formatDateTime(i.expiresAt)}</p>
                     </div>
                     {i.invitedById === t.id ? (
@@ -102,7 +90,9 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
                         {tc.name}
                         {isSelf ? <span className="ml-1 text-xs font-normal text-slate-500">(you)</span> : null}
                       </p>
-                      <p className="text-xs text-slate-500">{tc.email}</p>
+                      <p className="text-xs text-slate-500">{tc.phoneE164 ?? tc.email ?? "No contact number"}</p>
+                      {tc.teacherProfile?.subjects ? <p className="mt-1 text-xs text-slate-600">Subjects: {tc.teacherProfile.subjects}</p> : null}
+                      {tc.teacherProfile?.institutionName ? <p className="text-xs text-slate-500">{tc.teacherProfile.institutionName}</p> : null}
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {targetIsOwner ? <Badge tone="info">owner</Badge> : <Badge>teacher</Badge>}
                         <Badge tone={tc.status === "ACTIVE" ? "good" : "neutral"}>{tc.status === "ACTIVE" ? "active" : "access off"}</Badge>
