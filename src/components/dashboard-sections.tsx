@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Award, CalendarCheck, CalendarClock, GraduationCap, Layers, Wallet } from "lucide-react";
+import { Award, CalendarCheck, CalendarClock, GraduationCap, Layers, MessageCircle, Wallet } from "lucide-react";
 import type { studentDashboard } from "@/services/dashboards";
 import { Badge, Bars, Card, EmptyState, Stat } from "./ui";
 import { formatDay } from "@/lib/dates";
@@ -15,7 +15,16 @@ const STATUS: Record<string, { label: string; tone: "good" | "bad" | "neutral" }
 };
 
 /** Read-only overview shared by the student and parent dashboards. */
-export function DashboardOverview({ data, basePath }: { data: StudentDashboardData; basePath: string }) {
+export function DashboardOverview({
+  data,
+  basePath,
+  showGroupLinks = false,
+}: {
+  data: StudentDashboardData;
+  basePath: string;
+  /** Shows each batch's WhatsApp join button. Enabled on the student's own dashboard only. */
+  showGroupLinks?: boolean;
+}) {
   const latest = data.performance[data.performance.length - 1];
   const balance = data.balance?.balance ?? 0;
   const chart = data.performance.slice(-8).map((p) => ({
@@ -127,18 +136,31 @@ export function DashboardOverview({ data, basePath }: { data: StudentDashboardDa
             {data.batches.length === 0 ? (
               <p className="text-sm text-slate-500">Not in a class yet.</p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="space-y-4">
                 {data.batches.map((b) => (
-                  <li key={b.id} className="flex items-center gap-3">
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg grad-brand text-xs font-bold text-white">
-                      {b.name.charAt(0).toUpperCase()}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{b.name}</p>
-                      <p className="truncate text-xs text-slate-500">
-                        {b.subject ?? "General"} · {b.teacher.user.name}
-                      </p>
+                  <li key={b.id}>
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg grad-brand text-xs font-bold text-white">
+                        {b.name.charAt(0).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">{b.name}</p>
+                        <p className="truncate text-xs text-slate-500">
+                          {b.subject ?? "General"} · {b.teacher.user.name}
+                        </p>
+                      </div>
                     </div>
+                    {showGroupLinks && b.whatsappLink ? (
+                      <a
+                        href={b.whatsappLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-secondary btn-sm mt-2.5 w-full justify-center text-emerald-700"
+                      >
+                        <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                        Join WhatsApp group
+                      </a>
+                    ) : null}
                   </li>
                 ))}
               </ul>

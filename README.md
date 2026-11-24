@@ -55,6 +55,7 @@ Migrations in order:
 - `20261124090000_student_group`: adds the student group (Science, Commerce, Humanities) for Class 9 to 12. It only adds a column, so existing data is unchanged.
 - `20261124100000_teacher_phone_invites`: adds phone-based teacher invitations and optional subject details. Existing email invitations remain usable.
 - `20261124110000_password_reset_otp_cooldowns`: adds SMS reset-code cooldown and password-change timestamps, plus failed-code attempt tracking. It adds nullable columns and a counter default; existing accounts and reset rows remain intact.
+- `20261124120000_batch_whatsapp_link`: adds an optional `whatsappLink` column to `Batch` (teacher-set WhatsApp group invite, shown to students in the batch). Nullable and additive; existing batches are unchanged.
 
 ## SMS pricing
 

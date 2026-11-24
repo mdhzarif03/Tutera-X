@@ -3,17 +3,33 @@ import { UserError, isUniqueViolation } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import { isTime } from "@/lib/dates";
 import { optionalText, requireId, requireText } from "@/lib/validate";
+import { parseWhatsappLink } from "@/lib/whatsapp";
 import { assertBatchOwned, assertStudentOfTeacher } from "./scope";
 
-export async function listBatches(teacherId: string, archived: boolean) {
+/** Lists a teacher's batches. `search` (optional) matches name, class or subject, ignoring case. */
+export async function listBatches(teacherId: string, archived: boolean, search?: string) {
+  const q = (search ?? "").trim().slice(0, 80);
   return db.batch.findMany({
-    where: { teacherId, archivedAt: archived ? { not: null } : null },
+    where: {
+      teacherId,
+      archivedAt: archived ? { not: null } : null,
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" as const } },
+              { className: { contains: q, mode: "insensitive" as const } },
+              { subject: { contains: q, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    },
     orderBy: { name: "asc" },
     select: {
       id: true,
       name: true,
       className: true,
       subject: true,
+      whatsappLink: true,
       archivedAt: true,
       _count: { select: { members: { where: { leftAt: null } }, schedules: true } },
     },
@@ -24,9 +40,10 @@ export async function createBatch(teacherId: string, raw: Record<string, string>
   const name = requireText(raw.name, "Batch name", 80);
   const className = requireText(raw.className, "Class", 40);
   const subject = optionalText(raw.subject, 60);
+  const whatsappLink = parseWhatsappLink(raw.whatsappLink);
   try {
     return await db.$transaction(async (tx) => {
-      const batch = await tx.batch.create({ data: { teacherId, name, className, subject } });
+      const batch = await tx.batch.create({ data: { teacherId, name, className, subject, whatsappLink } });
       await audit(tx, { actorId: teacherId, action: "batch.create", entityType: "batch", entityId: batch.id });
       return batch.id;
     });
@@ -52,6 +69,23 @@ export async function updateBatch(teacherId: string, batchId: string, raw: Recor
   }
 }
 
+/** Sets or clears (empty value) the batch's WhatsApp group link. Touches nothing else on the batch. */
+export async function setBatchWhatsappLink(teacherId: string, batchId: string, raw: Record<string, string>): Promise<boolean> {
+  await assertBatchOwned(teacherId, batchId);
+  const whatsappLink = parseWhatsappLink(raw.whatsappLink);
+  await db.$transaction(async (tx) => {
+    await tx.batch.update({ where: { id: batchId }, data: { whatsappLink } });
+    await audit(tx, {
+      actorId: teacherId,
+      action: "batch.whatsapp_link",
+      entityType: "batch",
+      entityId: batchId,
+      changes: { set: whatsappLink !== null },
+    });
+  });
+  return whatsappLink !== null;
+}
+
 export async function setBatchArchived(teacherId: string, batchId: string, archived: boolean): Promise<void> {
   await assertBatchOwned(teacherId, batchId);
   await db.$transaction(async (tx) => {
@@ -68,6 +102,7 @@ export async function getBatch(teacherId: string, batchId: string) {
       name: true,
       className: true,
       subject: true,
+      whatsappLink: true,
       archivedAt: true,
       members: {
         where: { leftAt: null },

@@ -101,6 +101,15 @@ export async function updateBatchAction(formData: FormData): Promise<void> {
   });
 }
 
+export async function setBatchWhatsappLinkAction(formData: FormData): Promise<void> {
+  const t = await teacher();
+  const batchId = requireId(str(formData, "batchId"), "Batch");
+  return runAction(`/teacher/batches/${batchId}`, async () => {
+    const isSet = await batches.setBatchWhatsappLink(t.id, batchId, fields(formData));
+    return { message: isSet ? "WhatsApp group link saved. Students in this batch can now see it." : "WhatsApp group link removed." };
+  });
+}
+
 export async function setBatchArchivedAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const batchId = requireId(str(formData, "batchId"), "Batch");

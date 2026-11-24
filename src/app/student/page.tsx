@@ -14,7 +14,7 @@ export default async function StudentHome() {
         title={`Hi, ${user.name.split(" ")[0] ?? user.name}`}
         description={`${data.profile.className} · ${data.profile.institution}`}
       />
-      <DashboardOverview data={data} basePath="/student" />
+      <DashboardOverview data={data} basePath="/student" showGroupLinks />
     </>
   );
 }

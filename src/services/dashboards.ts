@@ -64,7 +64,7 @@ export async function studentDashboard(studentId: string) {
 
   const memberships = await db.batchStudent.findMany({
     where: { studentId, leftAt: null },
-    select: { batch: { select: { id: true, name: true, subject: true, teacher: { select: { user: { select: { name: true } } } } } } },
+    select: { batch: { select: { id: true, name: true, subject: true, whatsappLink: true, teacher: { select: { user: { select: { name: true } } } } } } },
   });
   const batchIds = memberships.map((m) => m.batch.id);
   const today = dateOnly(dhakaToday());

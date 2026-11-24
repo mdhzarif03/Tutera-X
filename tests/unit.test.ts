@@ -9,6 +9,7 @@ import { nextDhakaMidnight, dhakaToday, dateOnly, dhakaPeriod } from "@/lib/date
 import { verifyNishchitSignature } from "@/lib/sms/webhook";
 import { render, templates, PLATFORM_PREFIX } from "@/lib/sms/templates";
 import { requireNumber, requireText } from "@/lib/validate";
+import { parseWhatsappLink } from "@/lib/whatsapp";
 import { assertPasswordPolicy } from "@/lib/auth/policy";
 import { UserError, isUniqueViolation } from "@/lib/errors";
 import { round2, num } from "@/lib/money";
@@ -259,3 +260,26 @@ describe("student class, medium and group", () => {
   });
 });
 
+
+describe("WhatsApp group links", () => {
+  test("empty input clears the link", () => {
+    assert.equal(parseWhatsappLink(""), null);
+    assert.equal(parseWhatsappLink("   "), null);
+    assert.equal(parseWhatsappLink(undefined), null);
+  });
+  test("accepts WhatsApp invite links, with or without a scheme", () => {
+    assert.equal(parseWhatsappLink("https://chat.whatsapp.com/AbC123xyz"), "https://chat.whatsapp.com/AbC123xyz");
+    assert.equal(parseWhatsappLink("chat.whatsapp.com/AbC123xyz"), "https://chat.whatsapp.com/AbC123xyz");
+    assert.equal(parseWhatsappLink("http://chat.whatsapp.com/AbC123xyz"), "https://chat.whatsapp.com/AbC123xyz");
+    assert.equal(parseWhatsappLink(" https://wa.me/8801712345678 "), "https://wa.me/8801712345678");
+  });
+  test("rejects other websites, look-alike hosts and unsafe schemes", () => {
+    assert.throws(() => parseWhatsappLink("https://example.com/group"), UserError);
+    assert.throws(() => parseWhatsappLink("https://chat.whatsapp.com.evil.com/abc"), UserError);
+    assert.throws(() => parseWhatsappLink("https://evil.com/chat.whatsapp.com/abc"), UserError);
+    assert.throws(() => parseWhatsappLink("https://chat.whatsapp.com@evil.com/abc"), UserError);
+    assert.throws(() => parseWhatsappLink("javascript:alert(1)"), UserError);
+    assert.throws(() => parseWhatsappLink("https://chat.whatsapp.com/"), UserError);
+    assert.throws(() => parseWhatsappLink("https://chat.whatsapp.com/" + "a".repeat(200)), UserError);
+  });
+});

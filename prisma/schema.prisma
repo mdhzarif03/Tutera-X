@@ -293,6 +293,8 @@ model Batch {
   name        String
   className   String
   subject     String?
+  // Optional WhatsApp group invite link. Shown to students who are in this batch.
+  whatsappLink String?
   archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

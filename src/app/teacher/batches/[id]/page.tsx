@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MessageCircle } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/guards";
 import {
@@ -7,6 +8,7 @@ import {
   removeFromBatchAction,
   removeScheduleAction,
   setBatchArchivedAction,
+  setBatchWhatsappLinkAction,
   updateBatchAction,
 } from "@/actions/teacher";
 import { getBatch } from "@/services/batches";
@@ -145,6 +147,30 @@ export default async function BatchPage({
             <p className="mt-4 text-xs text-slate-500">
               To add a new student, <Link href="/teacher/students/new" className="text-teal-700 hover:underline">create them</Link> and choose this batch.
             </p>
+          </Card>
+
+          <Card title="WhatsApp group" description="Students in this batch see a join button on their dashboard." icon={<MessageCircle className="h-4 w-4" aria-hidden="true" />}>
+            <form action={setBatchWhatsappLinkAction} className="grid gap-3">
+              <input type="hidden" name="batchId" value={batch.id} />
+              <Field label="Group invite link" htmlFor="whatsappLink" hint="In WhatsApp: open the group, then Group info, then Invite via link. Leave empty and save to remove the link.">
+                <input
+                  id="whatsappLink"
+                  name="whatsappLink"
+                  type="text"
+                  inputMode="url"
+                  maxLength={200}
+                  defaultValue={batch.whatsappLink ?? ""}
+                  className="input"
+                  placeholder="https://chat.whatsapp.com/…"
+                />
+              </Field>
+              <button className="btn btn-secondary" type="submit">{batch.whatsappLink ? "Update link" : "Save link"}</button>
+            </form>
+            {batch.whatsappLink ? (
+              <a href={batch.whatsappLink} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex text-xs font-semibold text-emerald-700 hover:underline">
+                Test the link →
+              </a>
+            ) : null}
           </Card>
 
           <Card title="Batch details">
