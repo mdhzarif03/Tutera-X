@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import { logUnexpectedError, UserError, isForeignKeyViolation, isUniqueViolation } from "@/lib/errors";
+import {
+  logUnexpectedError,
+  UserError,
+  isForeignKeyViolation,
+  isUniqueViolation,
+} from "@/lib/errors";
 import { normalizeBdPhone } from "@/lib/phone";
 import { randomToken, sha256 } from "@/lib/crypto";
 import { audit } from "@/lib/audit";
@@ -9,7 +14,11 @@ import { addHours } from "@/lib/dates";
 import { queueSms } from "@/lib/sms/service";
 import { render, templates } from "@/lib/sms/templates";
 import { optionalText, requireNumber, requireText } from "@/lib/validate";
-import { randomUsernameNumber, usernameCandidate, usernameInitials } from "@/lib/usernames";
+import {
+  randomUsernameNumber,
+  usernameCandidate,
+  usernameInitials,
+} from "@/lib/usernames";
 import { checkClassFields } from "@/lib/student-options";
 import { assertBatchOwned, assertStudentOfTeacher } from "./scope";
 import { balancesFor } from "./payments";
@@ -31,14 +40,22 @@ export interface StudentInput {
 export function parseStudentInput(raw: Record<string, string>): StudentInput {
   const classFields = (() => {
     try {
-      return checkClassFields({ className: raw.className ?? "", version: raw.version ?? "", studentGroup: raw.studentGroup ?? "" });
+      return checkClassFields({
+        className: raw.className ?? "",
+        version: raw.version ?? "",
+        studentGroup: raw.studentGroup ?? "",
+      });
     } catch (err) {
-      throw new UserError(err instanceof Error ? err.message : "Check the class details.");
+      throw new UserError(
+        err instanceof Error ? err.message : "Check the class details.",
+      );
     }
   })();
   return {
     name: requireText(raw.name, "Student name", 120),
-    guardianPhone: normalizeBdPhone(requireText(raw.guardianPhone, "Parent or guardian phone", 20)),
+    guardianPhone: normalizeBdPhone(
+      requireText(raw.guardianPhone, "Parent or guardian phone", 20),
+    ),
     className: classFields.className,
     version: classFields.version,
     studentGroup: classFields.studentGroup,
@@ -59,10 +76,14 @@ export async function createStudent(
   requestId?: string,
 ): Promise<{ studentId: string; username: string }> {
   const teacher = await db.teacherProfile.findFirst({
-    where: { userId: teacherId, user: { role: "TEACHER", status: "ACTIVE", deletedAt: null } },
+    where: {
+      userId: teacherId,
+      user: { role: "TEACHER", status: "ACTIVE", deletedAt: null },
+    },
     select: { userId: true },
   });
-  if (!teacher) throw new UserError("You don't have permission to add students.");
+  if (!teacher)
+    throw new UserError("You don't have permission to add students.");
   if (input.batchId) await assertBatchOwned(teacherId, input.batchId);
 
   const studentId = randomUUID();
@@ -77,7 +98,11 @@ export async function createStudent(
     try {
       const created = await db.$transaction(
         async (tx) => {
-          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${duplicateLockKey}, 0))`;
+          // Return an integer instead of PostgreSQL's void result so Prisma can deserialize it.
+          await tx.$queryRaw`WITH lock_result AS MATERIALIZED (
+            SELECT pg_advisory_xact_lock(hashtextextended(${duplicateLockKey}, 0))
+          )
+          SELECT 1 FROM lock_result`;
           if (input.batchId) {
             const batch = await tx.batch.findFirst({
               where: { id: input.batchId, teacherId },
@@ -95,17 +120,27 @@ export async function createStudent(
             select: { userId: true },
           });
           if (duplicate) {
-            throw new UserError("This student is already saved. Add them to the batch instead.");
+            throw new UserError(
+              "This student is already saved. Add them to the batch instead.",
+            );
           }
 
-          await tx.$queryRaw`SELECT pg_advisory_xact_lock(${BigInt(number)})`;
+          // Return an integer instead of PostgreSQL's void result so Prisma can deserialize it.
+          await tx.$queryRaw`WITH lock_result AS MATERIALIZED (
+            SELECT pg_advisory_xact_lock(${BigInt(number)})
+          )
+          SELECT 1 FROM lock_result`;
           const usedNumber = await tx.user.findFirst({
             where: { username: { endsWith: `-${number}` } },
             select: { id: true },
           });
           if (usedNumber) return false;
 
-          const body = render(templates.studentActivation, { student: input.name, username, link: activationLink(token) });
+          const body = render(templates.studentActivation, {
+            student: input.name,
+            username,
+            link: activationLink(token),
+          });
           const guardian = await tx.guardian.upsert({
             where: { phoneE164: input.guardianPhone },
             update: {},
@@ -132,10 +167,17 @@ export async function createStudent(
             },
           });
           await tx.teacherStudent.create({ data: { teacherId, studentId } });
-          if (input.batchId) await tx.batchStudent.create({ data: { batchId: input.batchId, studentId } });
+          if (input.batchId)
+            await tx.batchStudent.create({
+              data: { batchId: input.batchId, studentId },
+            });
 
           const activation = await tx.studentActivation.create({
-            data: { userId: studentId, tokenHash: sha256(token), expiresAt: addHours(new Date(), 72) },
+            data: {
+              userId: studentId,
+              tokenHash: sha256(token),
+              expiresAt: addHours(new Date(), 72),
+            },
           });
           await queueSms(tx, {
             purpose: "ACCOUNT_ACTIVATION",
@@ -158,15 +200,24 @@ export async function createStudent(
       if (created) return { studentId, username };
     } catch (err) {
       if (isForeignKeyViolation(err)) {
-        logUnexpectedError("[student] related record constraint failed", {
-          operation: "student.create",
-          model: "StudentProfile, TeacherStudent, BatchStudent",
-          requestId,
-        }, err);
-        throw new UserError("The selected batch or teacher is no longer available. Refresh and try again.");
+        logUnexpectedError(
+          "[student] related record constraint failed",
+          {
+            operation: "student.create",
+            model: "StudentProfile, TeacherStudent, BatchStudent",
+            requestId,
+          },
+          err,
+        );
+        throw new UserError(
+          "The selected batch or teacher is no longer available. Refresh and try again.",
+        );
       }
       if (!isUniqueViolation(err)) throw err;
-      const usernameTaken = await db.user.findUnique({ where: { username }, select: { id: true } });
+      const usernameTaken = await db.user.findUnique({
+        where: { username },
+        select: { id: true },
+      });
       if (usernameTaken) continue;
 
       const duplicate = await db.studentProfile.findFirst({
@@ -178,16 +229,27 @@ export async function createStudent(
         },
         select: { userId: true },
       });
-      if (duplicate) throw new UserError("This student is already saved. Add them to the batch instead.");
-      logUnexpectedError("[student] unique constraint failed", {
-        operation: "student.create",
-        model: "User, Guardian, TeacherStudent",
-        requestId,
-      }, err);
-      throw new UserError("A conflicting record already exists. Check the student details and try again.");
+      if (duplicate)
+        throw new UserError(
+          "This student is already saved. Add them to the batch instead.",
+        );
+      logUnexpectedError(
+        "[student] unique constraint failed",
+        {
+          operation: "student.create",
+          model: "User, Guardian, TeacherStudent",
+          requestId,
+        },
+        err,
+      );
+      throw new UserError(
+        "A conflicting record already exists. Check the student details and try again.",
+      );
     }
   }
-  throw new UserError("Could not allocate a unique login ID. Please try again.");
+  throw new UserError(
+    "Could not allocate a unique login ID. Please try again.",
+  );
 }
 
 export async function listStudents(
@@ -236,67 +298,97 @@ export async function listStudents(
     }),
     db.teacherStudent.count({ where }),
   ]);
-  return { rows, total, page: opts.page, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+  return {
+    rows,
+    total,
+    page: opts.page,
+    pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+  };
 }
 
 export async function getStudentDetail(teacherId: string, studentId: string) {
   await assertStudentOfTeacher(teacherId, studentId);
 
-  const [student, memberships, attendance, results, recentSms, balances] = await Promise.all([
-    db.studentProfile.findUniqueOrThrow({
-      where: { userId: studentId },
-      select: {
-        userId: true,
-        className: true,
-        institution: true,
-        version: true,
-        studentGroup: true,
-        monthlyFee: true,
-        archivedAt: true,
-        user: { select: { name: true, username: true, status: true } },
-        guardian: {
-          select: {
-            phoneE164: true,
-            parentUser: { select: { user: { select: { username: true, status: true } } } },
+  const [student, memberships, attendance, results, recentSms, balances] =
+    await Promise.all([
+      db.studentProfile.findUniqueOrThrow({
+        where: { userId: studentId },
+        select: {
+          userId: true,
+          className: true,
+          institution: true,
+          version: true,
+          studentGroup: true,
+          monthlyFee: true,
+          archivedAt: true,
+          user: { select: { name: true, username: true, status: true } },
+          guardian: {
+            select: {
+              phoneE164: true,
+              parentUser: {
+                select: { user: { select: { username: true, status: true } } },
+              },
+            },
           },
         },
-      },
-    }),
-    db.batchStudent.findMany({
-      where: { studentId, batch: { teacherId } },
-      orderBy: { joinedAt: "desc" },
-      select: { leftAt: true, batch: { select: { id: true, name: true, archivedAt: true } } },
-    }),
-    db.attendance.findMany({
-      where: { studentId, batch: { teacherId } },
-      orderBy: { date: "desc" },
-      take: 60,
-      select: { date: true, status: true, batch: { select: { name: true } } },
-    }),
-    db.examResult.findMany({
-      where: { studentId, exam: { teacherId } },
-      orderBy: { exam: { examDate: "desc" } },
-      select: {
-        obtainedMarks: true,
-        isAbsent: true,
-        totalMarksSnapshot: true,
-        publishedAt: true,
-        exam: { select: { id: true, name: true, subject: true, examDate: true } },
-      },
-    }),
-    db.smsRecipient.findMany({
-      where: { studentId, smsMessage: { teacherId } },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-      select: { status: true, deliveryStatus: true, createdAt: true, phoneE164: true, smsMessage: { select: { purpose: true } } },
-    }),
-    balancesFor([studentId]),
-  ]);
+      }),
+      db.batchStudent.findMany({
+        where: { studentId, batch: { teacherId } },
+        orderBy: { joinedAt: "desc" },
+        select: {
+          leftAt: true,
+          batch: { select: { id: true, name: true, archivedAt: true } },
+        },
+      }),
+      db.attendance.findMany({
+        where: { studentId, batch: { teacherId } },
+        orderBy: { date: "desc" },
+        take: 60,
+        select: { date: true, status: true, batch: { select: { name: true } } },
+      }),
+      db.examResult.findMany({
+        where: { studentId, exam: { teacherId } },
+        orderBy: { exam: { examDate: "desc" } },
+        select: {
+          obtainedMarks: true,
+          isAbsent: true,
+          totalMarksSnapshot: true,
+          publishedAt: true,
+          exam: {
+            select: { id: true, name: true, subject: true, examDate: true },
+          },
+        },
+      }),
+      db.smsRecipient.findMany({
+        where: { studentId, smsMessage: { teacherId } },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          status: true,
+          deliveryStatus: true,
+          createdAt: true,
+          phoneE164: true,
+          smsMessage: { select: { purpose: true } },
+        },
+      }),
+      balancesFor([studentId]),
+    ]);
 
-  return { student, memberships, attendance, results, recentSms, balance: balances.get(studentId) ?? null };
+  return {
+    student,
+    memberships,
+    attendance,
+    results,
+    recentSms,
+    balance: balances.get(studentId) ?? null,
+  };
 }
 
-export async function updateStudent(teacherId: string, studentId: string, input: StudentInput): Promise<void> {
+export async function updateStudent(
+  teacherId: string,
+  studentId: string,
+  input: StudentInput,
+): Promise<void> {
   await assertStudentOfTeacher(teacherId, studentId);
   try {
     await db.$transaction(async (tx) => {
@@ -315,7 +407,10 @@ export async function updateStudent(teacherId: string, studentId: string, input:
         guardianId = g.id;
       }
 
-      await tx.user.update({ where: { id: studentId }, data: { name: input.name } });
+      await tx.user.update({
+        where: { id: studentId },
+        data: { name: input.name },
+      });
       await tx.studentProfile.update({
         where: { userId: studentId },
         data: {
@@ -327,45 +422,96 @@ export async function updateStudent(teacherId: string, studentId: string, input:
           guardianId,
         },
       });
-      await audit(tx, { actorId: teacherId, action: "student.update", entityType: "student", entityId: studentId, changes: { className: input.className, monthlyFee: input.monthlyFee } });
+      await audit(tx, {
+        actorId: teacherId,
+        action: "student.update",
+        entityType: "student",
+        entityId: studentId,
+        changes: { className: input.className, monthlyFee: input.monthlyFee },
+      });
     });
   } catch (err) {
-    if (isUniqueViolation(err)) throw new UserError("This phone number is already in use.");
+    if (isUniqueViolation(err))
+      throw new UserError("This phone number is already in use.");
     throw err;
   }
 }
 
-export async function setStudentArchived(teacherId: string, studentId: string, archived: boolean): Promise<void> {
+export async function setStudentArchived(
+  teacherId: string,
+  studentId: string,
+  archived: boolean,
+): Promise<void> {
   await assertStudentOfTeacher(teacherId, studentId);
   await db.$transaction(async (tx) => {
-    const user = await tx.user.findUniqueOrThrow({ where: { id: studentId }, select: { passwordHash: true } });
-    await tx.studentProfile.update({ where: { userId: studentId }, data: { archivedAt: archived ? new Date() : null } });
+    const user = await tx.user.findUniqueOrThrow({
+      where: { id: studentId },
+      select: { passwordHash: true },
+    });
+    await tx.studentProfile.update({
+      where: { userId: studentId },
+      data: { archivedAt: archived ? new Date() : null },
+    });
     await tx.user.update({
       where: { id: studentId },
-      data: { status: archived ? "DISABLED" : user.passwordHash ? "ACTIVE" : "PENDING_ACTIVATION" },
+      data: {
+        status: archived
+          ? "DISABLED"
+          : user.passwordHash
+            ? "ACTIVE"
+            : "PENDING_ACTIVATION",
+      },
     });
-    await audit(tx, { actorId: teacherId, action: archived ? "student.archive" : "student.restore", entityType: "student", entityId: studentId });
+    await audit(tx, {
+      actorId: teacherId,
+      action: archived ? "student.archive" : "student.restore",
+      entityType: "student",
+      entityId: studentId,
+    });
   });
 }
 
-export async function resendActivation(teacherId: string, studentId: string): Promise<void> {
+export async function resendActivation(
+  teacherId: string,
+  studentId: string,
+): Promise<void> {
   await assertStudentOfTeacher(teacherId, studentId);
   const user = await db.user.findUniqueOrThrow({
     where: { id: studentId },
-    select: { status: true, name: true, username: true, studentProfile: { select: { guardian: { select: { phoneE164: true } } } } },
+    select: {
+      status: true,
+      name: true,
+      username: true,
+      studentProfile: { select: { guardian: { select: { phoneE164: true } } } },
+    },
   });
-  if (user.status !== "PENDING_ACTIVATION") throw new UserError("This student has already joined.");
+  if (user.status !== "PENDING_ACTIVATION")
+    throw new UserError("This student has already joined.");
   if (!user.username) throw new UserError("This account has no login ID.");
   const phone = user.studentProfile?.guardian.phoneE164;
-  if (!phone) throw new UserError("There's no parent phone number saved for this student.");
+  if (!phone)
+    throw new UserError(
+      "There's no parent phone number saved for this student.",
+    );
 
   const token = randomToken(32);
-  const body = render(templates.studentActivation, { student: user.name, username: user.username, link: activationLink(token) });
+  const body = render(templates.studentActivation, {
+    student: user.name,
+    username: user.username,
+    link: activationLink(token),
+  });
 
   await db.$transaction(async (tx) => {
-    await tx.studentActivation.updateMany({ where: { userId: studentId, usedAt: null }, data: { usedAt: new Date() } });
+    await tx.studentActivation.updateMany({
+      where: { userId: studentId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
     const activation = await tx.studentActivation.create({
-      data: { userId: studentId, tokenHash: sha256(token), expiresAt: addHours(new Date(), 72) },
+      data: {
+        userId: studentId,
+        tokenHash: sha256(token),
+        expiresAt: addHours(new Date(), 72),
+      },
     });
     await queueSms(tx, {
       purpose: "ACCOUNT_ACTIVATION",
@@ -374,20 +520,35 @@ export async function resendActivation(teacherId: string, studentId: string): Pr
       template: templates.studentActivation,
       recipients: [{ studentId, phone, body }],
     });
-    await audit(tx, { actorId: teacherId, action: "student.activation_resent", entityType: "student", entityId: studentId });
+    await audit(tx, {
+      actorId: teacherId,
+      action: "student.activation_resent",
+      entityType: "student",
+      entityId: studentId,
+    });
   });
 }
-
 
 /**
  * Deletes a student when nothing depends on them. If they have attendance, fees, results, payments
  * or a parent login, they are archived instead, so no history is lost. A student shared with another
  * teacher is removed only from this teacher's classes.
  */
-export async function deleteStudent(teacherId: string, studentId: string): Promise<string> {
+export async function deleteStudent(
+  teacherId: string,
+  studentId: string,
+): Promise<string> {
   await assertStudentOfTeacher(teacherId, studentId);
 
-  const [attendance, results, charges, payments, adjustments, profile, otherTeachers] = await Promise.all([
+  const [
+    attendance,
+    results,
+    charges,
+    payments,
+    adjustments,
+    profile,
+    otherTeachers,
+  ] = await Promise.all([
     db.attendance.count({ where: { studentId } }),
     db.examResult.count({ where: { studentId } }),
     db.feeCharge.count({ where: { studentId } }),
@@ -395,11 +556,17 @@ export async function deleteStudent(teacherId: string, studentId: string): Promi
     db.paymentAdjustment.count({ where: { studentId } }),
     db.studentProfile.findUniqueOrThrow({
       where: { userId: studentId },
-      select: { guardian: { select: { parentUser: { select: { userId: true } } } } },
+      select: {
+        guardian: { select: { parentUser: { select: { userId: true } } } },
+      },
     }),
-    db.teacherStudent.count({ where: { studentId, teacherId: { not: teacherId } } }),
+    db.teacherStudent.count({
+      where: { studentId, teacherId: { not: teacherId } },
+    }),
   ]);
-  const hasRecords = attendance + results + charges + payments + adjustments > 0 || Boolean(profile.guardian.parentUser);
+  const hasRecords =
+    attendance + results + charges + payments + adjustments > 0 ||
+    Boolean(profile.guardian.parentUser);
 
   if (hasRecords) {
     await setStudentArchived(teacherId, studentId, true);
@@ -411,15 +578,25 @@ export async function deleteStudent(teacherId: string, studentId: string): Promi
     if (permanent) {
       await tx.batchStudent.deleteMany({ where: { studentId } });
       await tx.teacherStudent.deleteMany({ where: { studentId } });
-      await tx.smsDeliveryAttempt.deleteMany({ where: { smsRecipient: { studentId } } });
+      await tx.smsDeliveryAttempt.deleteMany({
+        where: { smsRecipient: { studentId } },
+      });
       await tx.smsRecipient.deleteMany({ where: { studentId } });
       await tx.studentProfile.delete({ where: { userId: studentId } });
       await tx.user.delete({ where: { id: studentId } });
     } else {
-      await tx.batchStudent.deleteMany({ where: { studentId, batch: { teacherId } } });
+      await tx.batchStudent.deleteMany({
+        where: { studentId, batch: { teacherId } },
+      });
       await tx.teacherStudent.deleteMany({ where: { studentId, teacherId } });
     }
-    await audit(tx, { actorId: teacherId, action: "student.delete", entityType: "student", entityId: studentId, changes: { permanent } });
+    await audit(tx, {
+      actorId: teacherId,
+      action: "student.delete",
+      entityType: "student",
+      entityId: studentId,
+      changes: { permanent },
+    });
   });
   return permanent
     ? "Student deleted."
