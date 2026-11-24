@@ -9,7 +9,7 @@ import { addHours } from "@/lib/dates";
 import { queueSms } from "@/lib/sms/service";
 import { render, templates } from "@/lib/sms/templates";
 import { optionalText, requireNumber, requireText } from "@/lib/validate";
-import { usernameBase, usernameCandidate } from "@/lib/usernames";
+import { nextUsername } from "@/lib/usernames";
 import { checkClassFields } from "@/lib/student-options";
 import { assertBatchOwned, assertStudentOfTeacher } from "./scope";
 import { balancesFor } from "./payments";
@@ -48,16 +48,6 @@ export function parseStudentInput(raw: Record<string, string>): StudentInput {
   };
 }
 
-async function nextUsername(name: string): Promise<string> {
-  const base = usernameBase(name);
-  for (let sequence = 1; sequence <= 10_000; sequence++) {
-    const candidate = usernameCandidate(base, sequence);
-    const taken = await db.user.findUnique({ where: { username: candidate }, select: { id: true } });
-    if (!taken) return candidate;
-  }
-  throw new UserError("Could not allocate a username for this student. Please try again.");
-}
-
 function activationLink(token: string): string {
   // Fragment, not path: the token never reaches request logs. See components/account-token-exchange.tsx.
   return `${getEnv().APP_URL.replace(/\/$/, "")}/activate#${token}`;
@@ -82,12 +72,18 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
   const token = randomToken(32);
 
   for (let attempt = 0; attempt < 5; attempt++) {
-    const username = await nextUsername(input.name);
-    const body = render(templates.studentActivation, { student: input.name, username, link: activationLink(token) });
+    let candidate: string | null = null;
 
     try {
-      await db.$transaction(
+      const username = await db.$transaction(
         async (tx) => {
+          const generatedUsername = await nextUsername(tx, input.name);
+          candidate = generatedUsername;
+          const body = render(templates.studentActivation, {
+            student: input.name,
+            username: generatedUsername,
+            link: activationLink(token),
+          });
           const guardian = await tx.guardian.upsert({
             where: { phoneE164: input.guardianPhone },
             update: {},
@@ -97,7 +93,7 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
             data: {
               id: studentId,
               role: "STUDENT",
-              username,
+              username: generatedUsername,
               name: input.name,
               status: "PENDING_ACTIVATION",
             },
@@ -133,13 +129,16 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
             entityId: studentId,
             changes: { className: input.className, batchId: input.batchId },
           });
+          return generatedUsername;
         },
         { timeout: 20_000 },
       );
       return { studentId, username };
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
-      const usernameTaken = await db.user.findUnique({ where: { username }, select: { id: true } });
+      const usernameTaken = candidate
+        ? await db.user.findUnique({ where: { username: candidate }, select: { id: true } })
+        : null;
       if (usernameTaken && attempt < 4) continue;
       if (!usernameTaken) throw new UserError("This phone number is already in use.");
     }

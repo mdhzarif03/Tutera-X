@@ -154,7 +154,7 @@ Before deploying, run: `npm install`, `npx prisma generate`, `npx prisma validat
 
 ## Students, parents and messages
 
-- **One profile per student.** A student record holds the student's name, class, medium, group (Class 9 to 12 only), school, monthly fee, and the parent or guardian's phone. A memorable login ID is built from the student's name (for example, `RAHIM`, then `RAHIM2` for the next student with that name); students and parents use the same login.
+- **One profile per student.** A student record holds the student's name, class, medium, group (Class 9 to 12 only), school, monthly fee, and the parent or guardian's phone. A login ID uses the student's first-name initials plus a globally unique sequence (for example, `RA-1001`, `SA-1002`); students and parents use the same login.
 - **Messages go to the parent or guardian's phone.** Welcome links, absence texts, exam notices and results all go there. Students have no phone number of their own in Tutera-X.
 - **Choices are fixed:** Class 6 to Class 12; medium is English Version, English Medium or Bangla Version; group is Science, Commerce or Humanities. The lists live in `src/lib/student-options.ts`.
 - **Existing data:** a student's old phone number is kept in the database but is no longer shown or used. Students whose medium was typed in before may need it picked again the next time their profile is saved.

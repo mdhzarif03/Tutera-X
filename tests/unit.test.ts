@@ -12,7 +12,7 @@ import { requireNumber, requireText } from "@/lib/validate";
 import { assertPasswordPolicy } from "@/lib/auth/policy";
 import { UserError, isUniqueViolation } from "@/lib/errors";
 import { round2, num } from "@/lib/money";
-import { usernameBase, usernameCandidate } from "@/lib/usernames";
+import { usernameCandidate, usernamePrefix } from "@/lib/usernames";
 
 describe("phone normalisation", () => {
   test("accepts the common Bangladesh forms", () => {
@@ -133,15 +133,18 @@ describe("money and errors", () => {
 });
 
 describe("memorable usernames", () => {
-  test("normalizes names and uses a safe fallback when no Latin letters are available", () => {
-    assert.equal(usernameBase("Rahim Uddin"), "RAHIMUDDIN");
-    assert.equal(usernameBase("Éva"), "EVA");
-    assert.equal(usernameBase("রহিম"), "STUDENT");
+  test("uses two first-name initials and skips the common Md prefix", () => {
+    assert.equal(usernamePrefix("Rahim Uddin"), "RA");
+    assert.equal(usernamePrefix("Md. Rahim Uddin"), "RA");
+    assert.equal(usernamePrefix("Éva"), "EV");
+    assert.equal(usernamePrefix("A"), "AX");
+    assert.equal(usernamePrefix("রহিম"), "ST");
+    assert.equal(usernamePrefix("123"), "ST");
   });
-  test("adds a numeric suffix to distinguish repeated names", () => {
-    const base = usernameBase("Rahim");
-    assert.equal(usernameCandidate(base, 1), "RAHIM");
-    assert.equal(usernameCandidate(base, 2), "RAHIM2");
+  test("formats sequential IDs with a fixed-width number", () => {
+    assert.equal(usernameCandidate("RA", 1001n), "RA-1001");
+    assert.equal(usernameCandidate("SA", 1002n), "SA-1002");
+    assert.equal(usernameCandidate("MI", 10000n), "MI-10000");
   });
 });
 
