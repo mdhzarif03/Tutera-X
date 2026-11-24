@@ -22,3 +22,8 @@ export async function POST(request: Request): Promise<Response> {
   const processed = await runDueJobs(50);
   return Response.json({ processed });
 }
+
+/** Vercel Cron sends GET requests with the same bearer secret, so GET runs the same guarded job pass. */
+export async function GET(request: Request): Promise<Response> {
+  return POST(request);
+}
