@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
  * Reads the token from the URL fragment, removes it from the address bar at once, and trades it for
  * a page-scoped cookie with a POST. The token never appears in a path or a query string.
  */
-export function AccountTokenExchange({ kind }: { kind: "activation" | "reset" }) {
+export function AccountTokenExchange({ kind }: { kind: "activation" }) {
   const [state, setState] = useState<"checking" | "missing" | "error">("checking");
   const [message, setMessage] = useState("");
 

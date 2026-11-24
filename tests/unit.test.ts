@@ -15,6 +15,11 @@ import { round2, num } from "@/lib/money";
 import { randomUsernameNumber, usernameCandidate, usernameInitials } from "@/lib/usernames";
 import { retryDelayMs, smsRecipientIdFromPayload } from "@/lib/job-utils";
 import { logUnexpectedError, prismaRetryReason } from "@/lib/errors";
+import {
+  isPasswordActionAllowed,
+  PASSWORD_CHANGE_COOLDOWN_MS,
+  PASSWORD_RESET_COOLDOWN_MS,
+} from "@/lib/auth/password-limits";
 
 describe("phone normalisation", () => {
   test("accepts the common Bangladesh forms", () => {
@@ -163,6 +168,32 @@ describe("background job validation and retry timing", () => {
     assert.equal(smsRecipientIdFromPayload({ smsRecipientId: "" }), null);
     assert.equal(smsRecipientIdFromPayload({ smsRecipientId: 1 }), null);
     assert.equal(smsRecipientIdFromPayload(null), null);
+  });
+
+  describe("password cooldown policy", () => {
+    const now = new Date("2026-11-24T00:00:00.000Z");
+    test("forgot-password cooldown starts at the OTP request and opens at exactly three days", () => {
+      assert.equal(isPasswordActionAllowed(null, PASSWORD_RESET_COOLDOWN_MS, now), true);
+      assert.equal(
+        isPasswordActionAllowed(new Date(now.getTime() - PASSWORD_RESET_COOLDOWN_MS + 1), PASSWORD_RESET_COOLDOWN_MS, now),
+        false,
+      );
+      assert.equal(
+        isPasswordActionAllowed(new Date(now.getTime() - PASSWORD_RESET_COOLDOWN_MS), PASSWORD_RESET_COOLDOWN_MS, now),
+        true,
+      );
+    });
+    test("signed-in password changes reopen after exactly seven days", () => {
+      assert.equal(isPasswordActionAllowed(null, PASSWORD_CHANGE_COOLDOWN_MS, now), true);
+      assert.equal(
+        isPasswordActionAllowed(new Date(now.getTime() - PASSWORD_CHANGE_COOLDOWN_MS), PASSWORD_CHANGE_COOLDOWN_MS, now),
+        true,
+      );
+      assert.equal(
+        isPasswordActionAllowed(new Date(now.getTime() - PASSWORD_CHANGE_COOLDOWN_MS + 1), PASSWORD_CHANGE_COOLDOWN_MS, now),
+        false,
+      );
+    });
   });
   test("retry delay grows exponentially and is capped", () => {
     assert.equal(retryDelayMs(1), 30_000);

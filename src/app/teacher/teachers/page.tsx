@@ -1,13 +1,11 @@
 import { requireRole } from "@/lib/auth/guards";
 import {
-  dismissResetLinkAction,
   inviteTeacherAction,
-  issueTeacherResetAction,
   revokeInvitationAction,
+  sendTeacherResetCodeAction,
   setTeacherActiveAction,
 } from "@/actions/teacher";
-import { listInvitations, listTeachers, resetUrl } from "@/services/teachers";
-import { readResetRevealCookie } from "@/lib/auth/one-time";
+import { listInvitations, listTeachers } from "@/services/teachers";
 import { Badge, Card, EmptyState, Field, Flash, PageHeader } from "@/components/ui";
 import { ConfirmAction } from "@/components/confirm-action";
 import { formatDateTime } from "@/lib/dates";
@@ -19,28 +17,15 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
   const t = await requireRole("TEACHER");
   const sp = await searchParams;
   const viewerIsOwner = t.teacherRole === "OWNER";
-  const [teachers, invitations, resetToken] = await Promise.all([
+  const [teachers, invitations] = await Promise.all([
     listTeachers(),
     listInvitations(),
-    readResetRevealCookie(),
   ]);
 
   return (
     <>
       <PageHeader title="Team" description="Invite a colleague by phone. They receive a secure SMS link that expires after three days." />
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
-
-      {resetToken ? (
-        <Card title="Send this reset link to the teacher" className="mb-6 border-teal-300">
-          <p className="mb-3 text-sm text-slate-600">
-            It lets them choose a new password. It works once and expires in 24 hours. It is shown only until you press Done.
-          </p>
-          <code className="block break-all rounded-md bg-slate-900 px-3 py-2 text-xs text-slate-100">{resetUrl(resetToken)}</code>
-          <form action={dismissResetLinkAction} className="mt-3">
-            <button className="btn btn-secondary btn-sm" type="submit">Done</button>
-          </form>
-        </Card>
-      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-1">
@@ -102,10 +87,12 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
 
                   {viewerIsOwner && !isSelf ? (
                     <div className="mt-3 flex flex-wrap items-start gap-2">
-                      <form action={issueTeacherResetAction}>
-                        <input type="hidden" name="teacherId" value={tc.id} />
-                        <button className="btn btn-secondary btn-sm" type="submit">Create a password reset link</button>
-                      </form>
+                      {tc.phoneE164 && tc.status === "ACTIVE" ? (
+                        <form action={sendTeacherResetCodeAction}>
+                          <input type="hidden" name="teacherId" value={tc.id} />
+                          <button className="btn btn-secondary btn-sm" type="submit">Send reset code by SMS</button>
+                        </form>
+                      ) : null}
                       {!targetIsOwner && tc.status === "ACTIVE" ? (
                         <ConfirmAction
                           action={setTeacherActiveAction}
@@ -129,7 +116,7 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
             })}
           </ul>
           {!viewerIsOwner ? (
-            <p className="mt-4 text-xs text-slate-500">Only the owner can send reset links or turn a teacher&apos;s access on or off.</p>
+            <p className="mt-4 text-xs text-slate-500">Only the owner can send a teacher reset code or turn a teacher&apos;s access on or off.</p>
           ) : null}
         </Card>
       </div>

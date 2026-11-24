@@ -10,7 +10,7 @@ export const metadata = { title: "Activate account" };
 
 export default async function ActivatePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
-  const hasToken = Boolean(await readAccountTokenCookie("activation"));
+  const hasToken = Boolean(await readAccountTokenCookie());
   return (
     <AuthCard title="Set your password" description="Welcome! Choose a password to get started. This link works only once.">
       <Flash error={pick(sp, "error")} />

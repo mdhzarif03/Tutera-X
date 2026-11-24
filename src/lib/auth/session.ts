@@ -11,6 +11,7 @@ const SESSION_TTL_MS = 30 * 24 * 3600 * 1000;
 
 export interface SessionUser {
   id: string;
+  sessionId: string;
   role: Role;
   name: string;
   username: string | null;
@@ -79,6 +80,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
 
   return {
     id: u.id,
+    sessionId: session.id,
     role: u.role,
     name: u.name,
     username: u.username,

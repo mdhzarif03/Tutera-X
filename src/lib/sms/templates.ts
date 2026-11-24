@@ -8,7 +8,7 @@ export const templates = {
   resultAbsent: "Dear Guardian, {student} was marked absent for {exam}. - {teacher}",
   studentActivation: "Dear Guardian, {student} can now use Tutera-X. Login ID: {username}. Set a password within 72 hours: {link}",
   teacherInvitation: "Tutera-X: You have been invited to join as a teacher. Set up your profile within 72 hours: {link}",
-  passwordReset: "Tutera-X: reset your password within 1 hour: {link}",
+  passwordReset: "Tutera-X verification code: {code}. It expires in {minutes} minutes. Do not share it.",
   absenceCorrection: "Dear Guardian, please ignore the absence notice for {student} on {date}. It was sent in error. - {teacher}",
   resultCorrection: "Dear Guardian, a correction: {student} got {marks} out of {total} in {exam}. - {teacher}",
 } as const;

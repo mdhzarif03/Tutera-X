@@ -1,7 +1,6 @@
 "use server";
 
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import type { PaymentMethod } from "@prisma/client";
 import { requireRole } from "@/lib/auth/guards";
 import { runAction } from "@/lib/action";
@@ -19,7 +18,7 @@ import * as comms from "@/services/comms";
 import * as teachers from "@/services/teachers";
 import { refreshSmsBalance } from "@/services/comms";
 import { providerMode } from "@/lib/sms/nishchit";
-import { clearResetRevealCookie, setResetRevealCookie } from "@/lib/auth/one-time";
+import { sendTeacherPasswordResetCode } from "@/services/accounts";
 
 async function teacher() {
   return requireRole("TEACHER");
@@ -348,18 +347,11 @@ export async function deleteStudentAction(formData: FormData): Promise<void> {
   });
 }
 
-export async function issueTeacherResetAction(formData: FormData): Promise<void> {
+export async function sendTeacherResetCodeAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const targetId = requireId(str(formData, "teacherId"), "Teacher");
   return runAction("/teacher/teachers", async () => {
-    const token = await teachers.issueTeacherResetLink(t.id, targetId);
-    await setResetRevealCookie(token);
-    return { message: "Reset link created. Send it privately. It works once and expires in 24 hours." };
+    await sendTeacherPasswordResetCode(t.id, targetId);
+    return { message: "A password verification code has been queued by SMS. The teacher can enter it on the Forgot password page." };
   });
-}
-
-export async function dismissResetLinkAction(): Promise<void> {
-  await teacher();
-  await clearResetRevealCookie();
-  redirect("/teacher/teachers");
 }

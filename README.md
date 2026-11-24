@@ -49,9 +49,10 @@ After any schema change, add a migration with `npx prisma migrate dev --name <ch
 Migrations in order:
 
 - `20261122180000_init`: the initial schema. Applied or not, it must not be edited, because Prisma checksums applied migrations. `scripts/generate-initial-migration.py` refuses to overwrite it.
+- `20261123090000_sms_recipient_student_fk`: adds the foreign key from `SmsRecipient.studentId` to `StudentProfile.userId`, which the `SmsRecipient.student` relation needs. It changes no data. Before adding the constraint it checks for recipients that point at missing students and stops with a clear error if it finds any. Running `npx prisma migrate deploy` against an existing database applies only this new migration.
 - `20261124090000_student_group`: adds the student group (Science, Commerce, Humanities) for Class 9 to 12. It only adds a column, so existing data is unchanged.
 - `20261124100000_teacher_phone_invites`: adds phone-based teacher invitations and optional subject details. Existing email invitations remain usable.
-- `20261123090000_sms_recipient_student_fk`: adds the foreign key from `SmsRecipient.studentId` to `StudentProfile.userId`, which the `SmsRecipient.student` relation needs. It changes no data. Before adding the constraint it checks for recipients that point at missing students and stops with a clear error if it finds any. Running `npx prisma migrate deploy` against an existing database applies only this new migration.
+- `20261124110000_password_reset_otp_cooldowns`: adds SMS reset-code cooldown and password-change timestamps, plus failed-code attempt tracking. It adds nullable columns and a counter default; existing accounts and reset rows remain intact.
 
 ## SMS pricing
 
@@ -69,15 +70,15 @@ If the provider is not configured, unreachable, or returns something that fails 
 - Old quota columns and the allowance ledger remain in the database but are no longer used. A future migration can remove them once you are sure no one needs the history.
 
 
-## Activation, password reset and invitation links
+## Activation and invitation links; password reset codes
 
-All three use the same pattern. The link carries its token in the URL **fragment** (`/activate#<token>`, `/reset#<token>`, `/accept-invite#<token>`). Browsers do not send the fragment to the server, so the token does not reach request logs or Referer headers. On load, the page reads the fragment, removes it from the address bar, and exchanges it with a POST for a short-lived httpOnly, same-site cookie scoped to that page. The form reads the cookie, not the URL.
+Activation and invitation use single-use links whose token is carried in the URL **fragment** (`/activate#<token>`, `/accept-invite#<token>`). Browsers do not send the fragment to the server, so the token does not reach request logs or Referer headers. On load, the page reads the fragment, removes it from the address bar, and exchanges it with a POST for a short-lived httpOnly, same-site cookie scoped to that page.
 
-Tokens are single-use and expire: invitations after 72 hours, activation after 72 hours, password reset after one hour. The exchange checks the token against the database first.
+Forgot-password sends a 6-digit code by SMS. The code expires after 10 minutes and is invalidated after five incorrect attempts. A user can request a reset code once every three days, measured from the request; successful use revokes all active sessions. A password changed while signed in does not require the old password and can be done once every seven days. That seven-day limit applies to signed-in changes; a password reset uses the separate three-day request limit. Other sessions are revoked after a signed-in password change, while the current session stays active.
 
-**Upgrade note.** Activation and reset links sent before this version used a path token (`/activate/<token>`, `/reset/<token>`). Those URLs no longer exist. Ask the teacher to **send a new activation link**, or request a new password reset.
+Invitations expire after 72 hours and activation links expire after 72 hours. Both are single-use.
 
-The exchange requires JavaScript. Without it, the page cannot read the fragment.
+The activation and invitation exchanges require JavaScript. Without it, the page cannot read the link fragment.
 
 ## Background jobs and multiple instances
 
@@ -128,32 +129,24 @@ npm run typecheck
 
 **Run in this environment (real execution):**
 
-- Unit suite: 50 of 50 tests pass (`node:test` with `tsx`). This includes a configured-but-unreachable provider, which made a real failed network call and fell back to the local estimate.
-- Integration suite: discovered and reports one explicit skip, because no PostgreSQL database was available. **Its tests have not run.**
-- TypeScript parser: zero syntax errors across all source files.
-- Import resolution: every internal import resolves to a file.
-- The initial migration was regenerated from the final schema, with 29 tables, 11 enums and 33 foreign keys. The generator's own consistency checks passed.
+- Unit suite: 64 of 64 tests pass (`npm test`).
+- TypeScript check: `npm run typecheck` passes.
+- Prisma schema validation: `npm run db:validate` passes.
+- Production build: `npm run build` succeeds with a non-routable loopback database URL and `JOB_RUNNER=off`. Static generation logs that bootstrap cannot reach the dummy database; no production database was contacted.
+- PostgreSQL integration suite: three suites are explicitly skipped because `TEST_DATABASE_URL` is not set. **No integration tests ran.**
 
-**Not run, because this environment has no package registry access and no PostgreSQL:**
-
-- `npm install`; `prisma generate`; `prisma validate`; `prisma migrate diff` (`npm run db:verify`); `prisma migrate deploy` against a real database.
-- `npm run typecheck` with the real dependencies. The remaining type errors come from missing Prisma, Node and Next type packages, not from application logic, but this must be confirmed.
-- `npm run build`.
-- `npm run test:integration` against PostgreSQL. The concurrency and settlement guarantees described above are designed to hold through conditional SQL updates, but they are not yet demonstrated on a database.
-- Running the app in a browser, including the fragment-token exchange pages and the job runner under real load.
-- End-to-end behaviour against the live Nishchit API. The pricing preview response is validated defensively, but its live shape is confirmed only from Nishchit's published documentation.
-
-Before deploying, run: `npm install`, `npx prisma generate`, `npx prisma validate`, `npm run db:verify` with a shadow database, `npx prisma migrate deploy`, `npm run typecheck`, `npm run build`, `npm test`, `npm run test:integration` with `TEST_DATABASE_URL`, and a manual browser pass through sign-in, activation, a send with **Check cost**, an attendance save with an absence notice, and a result publish.
+Not run: `npm run db:verify` with a shadow database, migration deployment, PostgreSQL integration tests, browser testing, or end-to-end testing against Nishchit. The password-recovery migration has not been applied.
 
 ## Behaviour notes for owners and teachers
 
 - **Deleting a student** removes them and their SMS notice history only when nothing else is recorded for them (no attendance, fees, results, payments or parent login). Otherwise they are archived. Removing notice history is intentional: it applies only to students with no other records.
 - **Removing an absence mark** sends the parent a short correction text if they were told about the absence. Nothing is sent otherwise.
 - **Changing marks after results are shared** sends each affected parent a correction text. Shared results cannot be taken back.
-- **Password reset without a phone number:** the owner can create a reset link for a teacher on the Team page. The link works once and expires in 24 hours.
+- **Teacher password recovery:** the owner can send a reset code by SMS to an active teacher with a phone number on file. The teacher enters their login identifier and code on the Forgot password page.
+- **Password changes:** forgotten-password recovery uses a one-time SMS code, with one request allowed every three days starting at the request time. A signed-in user can change their password without the old password; they must wait seven days between changes. Other sessions are signed out, while the current session stays active.
 - **Teacher onboarding:** new invitations are sent by SMS to the supplied phone number. Invitees set their name, optional subjects and institution, and password before joining. Phone-based teacher accounts sign in with that phone number. Previously sent email invitations remain valid.
 - **Balance check:** pages never wait for the messaging provider. The last known balance is shown and refreshed in the background. An explicit refresh still waits for the result.
-- **JavaScript:** invitation, welcome and reset links read their secret in the browser, so JavaScript must be on. Pages show a note if it is off.
+- **JavaScript:** invitation and welcome links read their secret in the browser, so JavaScript must be on. Pages show a note if it is off.
 
 ## Students, parents and messages
 

@@ -34,46 +34,26 @@ export async function clearInviteCookie(): Promise<void> {
   jar.delete({ name: INVITE_COOKIE, path: "/accept-invite" });
 }
 
-// Activation and password-reset links. The token is in the URL fragment, exchanged for a cookie
-// scoped to the single page that needs it, exactly like invitations.
-export type AccountTokenKind = "activation" | "reset";
+// Activation links carry a token in the URL fragment, exchanged for a page-scoped cookie.
+const ACCOUNT_COOKIE = { name: "tx_activate", path: "/activate", ttl: 15 * 60 };
 
-const ACCOUNT_COOKIE: Record<AccountTokenKind, { name: string; path: string; ttl: number }> = {
-  activation: { name: "tx_activate", path: "/activate", ttl: 15 * 60 },
-  reset: { name: "tx_reset", path: "/reset", ttl: 15 * 60 },
-};
-
-export async function setAccountTokenCookie(kind: AccountTokenKind, token: string): Promise<void> {
-  const c = ACCOUNT_COOKIE[kind];
+export async function setAccountTokenCookie(token: string): Promise<void> {
   const jar = await cookies();
-  jar.set(c.name, token, { httpOnly: true, secure: secure(), sameSite: "strict", path: c.path, maxAge: c.ttl });
+  jar.set(ACCOUNT_COOKIE.name, token, {
+    httpOnly: true,
+    secure: secure(),
+    sameSite: "strict",
+    path: ACCOUNT_COOKIE.path,
+    maxAge: ACCOUNT_COOKIE.ttl,
+  });
 }
 
-export async function readAccountTokenCookie(kind: AccountTokenKind): Promise<string | null> {
+export async function readAccountTokenCookie(): Promise<string | null> {
   const jar = await cookies();
-  return jar.get(ACCOUNT_COOKIE[kind].name)?.value ?? null;
+  return jar.get(ACCOUNT_COOKIE.name)?.value ?? null;
 }
 
-export async function clearAccountTokenCookie(kind: AccountTokenKind): Promise<void> {
-  const c = ACCOUNT_COOKIE[kind];
+export async function clearAccountTokenCookie(): Promise<void> {
   const jar = await cookies();
-  jar.delete({ name: c.name, path: c.path });
-}
-
-// Lets the owner see a freshly created reset link once. Path-scoped to the Team page.
-export const RESET_REVEAL_COOKIE = "tx_reset_reveal";
-
-export async function setResetRevealCookie(token: string): Promise<void> {
-  const jar = await cookies();
-  jar.set(RESET_REVEAL_COOKIE, token, { httpOnly: true, secure: secure(), sameSite: "strict", path: "/teacher/teachers", maxAge: 5 * 60 });
-}
-
-export async function readResetRevealCookie(): Promise<string | null> {
-  const jar = await cookies();
-  return jar.get(RESET_REVEAL_COOKIE)?.value ?? null;
-}
-
-export async function clearResetRevealCookie(): Promise<void> {
-  const jar = await cookies();
-  jar.delete({ name: RESET_REVEAL_COOKIE, path: "/teacher/teachers" });
+  jar.delete({ name: ACCOUNT_COOKIE.name, path: ACCOUNT_COOKIE.path });
 }

@@ -1,15 +1,22 @@
+import { randomInt } from "node:crypto";
 import type { Prisma, Role } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
 import { db } from "@/lib/db";
 import { UserError } from "@/lib/errors";
 import { looksLikePhone, normalizeBdPhone } from "@/lib/phone";
-import { randomToken, sha256 } from "@/lib/crypto";
+import { sha256 } from "@/lib/crypto";
 import { addHours, addMinutes } from "@/lib/dates";
 import { audit } from "@/lib/audit";
-import { getEnv } from "@/lib/env";
 import { assertPasswordPolicy, hashPassword, verifyPassword } from "@/lib/auth/password";
-import { revokeAllSessions } from "@/lib/auth/session";
 import { queueSms } from "@/lib/sms/service";
 import { render, templates } from "@/lib/sms/templates";
+import {
+  isPasswordActionAllowed,
+  PASSWORD_CHANGE_COOLDOWN_MS,
+  PASSWORD_RESET_COOLDOWN_MS,
+  PASSWORD_RESET_MAX_ATTEMPTS,
+  PASSWORD_RESET_OTP_TTL_MINUTES,
+} from "@/lib/auth/password-limits";
 
 const GENERIC_FAILURE = "We couldn't sign you in. Check your details and try again.";
 const MAX_FAILURES = 5;
@@ -88,10 +95,47 @@ export async function activateAccount(token: string, password: string): Promise<
   return { userId: record.user.id, role: record.user.role };
 }
 
-/**
- * Sends a reset link to the phone number on file. The response never reveals whether the account
- * exists. Teachers and students without a phone number must ask the owner for help.
- */
+async function issuePasswordResetCode(userId: string, phone: string, actorId: string, action: string): Promise<boolean> {
+  const now = new Date();
+  const code = String(randomInt(100_000, 1_000_000));
+  const codeHash = await hash(code);
+  const body = render(templates.passwordReset, { code, minutes: PASSWORD_RESET_OTP_TTL_MINUTES });
+
+  return db.$transaction(async (tx) => {
+    const claimed = await tx.user.updateMany({
+      where: {
+        id: userId,
+        status: "ACTIVE",
+        deletedAt: null,
+        OR: [
+          { passwordResetRequestedAt: null },
+          { passwordResetRequestedAt: { lte: new Date(now.getTime() - PASSWORD_RESET_COOLDOWN_MS) } },
+        ],
+      },
+      data: { passwordResetRequestedAt: now },
+    });
+    if (claimed.count !== 1) return false;
+
+    await tx.passwordResetToken.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: now },
+    });
+    const reset = await tx.passwordResetToken.create({
+      data: { userId, tokenHash: codeHash, expiresAt: addMinutes(now, PASSWORD_RESET_OTP_TTL_MINUTES) },
+    });
+    await queueSms(tx, {
+      purpose: "PASSWORD_RESET",
+      dedupeKey: `reset:${reset.id}`,
+      teacherId: null,
+      template: templates.passwordReset,
+      recipients: [{ studentId: null, phone, body }],
+    });
+    await audit(tx, { actorId, action, entityType: "user", entityId: userId });
+    return true;
+  });
+}
+
+/** Sends a code when the account can be safely matched and the cooldown has elapsed. */
 export async function requestPasswordReset(identifier: string): Promise<void> {
   let where: Prisma.UserWhereInput;
   try {
@@ -101,57 +145,130 @@ export async function requestPasswordReset(identifier: string): Promise<void> {
   }
   const user = await db.user.findFirst({
     where: { ...where, status: "ACTIVE", deletedAt: null },
-    select: { id: true, phoneE164: true, role: true, studentProfile: { select: { guardian: { select: { phoneE164: true } } } } },
+    select: {
+      id: true,
+      phoneE164: true,
+      passwordResetRequestedAt: true,
+      studentProfile: { select: { guardian: { select: { phoneE164: true } } } },
+      parentProfile: { select: { guardian: { select: { phoneE164: true } } } },
+    },
   });
-  // Students have no phone of their own, so a student's reset goes to the parent's phone.
-  const phone = user?.phoneE164 ?? user?.studentProfile?.guardian.phoneE164;
-  if (!user || !phone) return;
+  const phone = user?.phoneE164 ?? user?.studentProfile?.guardian.phoneE164 ?? user?.parentProfile?.guardian.phoneE164;
+  const now = new Date();
+  if (
+    !user ||
+    !phone ||
+    !isPasswordActionAllowed(user.passwordResetRequestedAt, PASSWORD_RESET_COOLDOWN_MS, now)
+  ) {
+    return;
+  }
 
-  const token = randomToken(32);
-  const link = `${getEnv().APP_URL.replace(/\/$/, "")}/reset#${token}`;
-  const body = render(templates.passwordReset, { link });
-
-  await db.$transaction(async (tx) => {
-    const reset = await tx.passwordResetToken.create({
-      data: { userId: user.id, tokenHash: sha256(token), expiresAt: addHours(new Date(), 1) },
-    });
-    await queueSms(tx, {
-      purpose: "PASSWORD_RESET",
-      dedupeKey: `reset:${reset.id}`,
-      teacherId: null,
-      template: templates.passwordReset,
-      recipients: [{ studentId: null, phone, body }],
-    });
-    await audit(tx, { actorId: user.id, action: "account.reset_requested", entityType: "user", entityId: user.id });
-  });
+  await issuePasswordResetCode(user.id, phone, user.id, "account.reset_requested");
 }
 
-export async function resetPassword(token: string, password: string): Promise<void> {
-  assertPasswordPolicy(password);
-  const record = await db.passwordResetToken.findUnique({ where: { tokenHash: sha256(token) } });
-  if (!record || record.usedAt || record.expiresAt < new Date()) {
-    throw new UserError("This link is no longer valid. Request a new one.");
+export async function sendTeacherPasswordResetCode(actorId: string, targetId: string): Promise<void> {
+  const actor = await db.teacherProfile.findUnique({ where: { userId: actorId }, select: { role: true } });
+  if (actor?.role !== "OWNER") throw new UserError("Only the owner can send a teacher reset code.");
+
+  const target = await db.user.findFirst({
+    where: { id: targetId, role: "TEACHER", status: "ACTIVE", deletedAt: null },
+    select: { id: true, phoneE164: true, passwordResetRequestedAt: true },
+  });
+  if (!target) throw new UserError("Teacher not found.");
+  if (!target.phoneE164) throw new UserError("This teacher has no phone number for SMS password recovery.");
+  if (!isPasswordActionAllowed(target.passwordResetRequestedAt, PASSWORD_RESET_COOLDOWN_MS, new Date())) {
+    throw new UserError("A reset code was requested within the last 3 days.");
   }
+  const sent = await issuePasswordResetCode(target.id, target.phoneE164, actorId, "account.reset_requested_by_owner");
+  if (!sent) throw new UserError("A reset code was requested within the last 3 days.");
+}
+
+export async function resetPassword(identifier: string, code: string, password: string): Promise<void> {
+  assertPasswordPolicy(password);
+  if (!/^\d{6}$/.test(code)) throw new UserError("Enter the 6-digit code from the text message.");
+
+  let where: Prisma.UserWhereInput;
+  try {
+    where = identifierWhere(identifier);
+  } catch {
+    throw new UserError("The code is invalid or expired.");
+  }
+  const now = new Date();
+  const user = await db.user.findFirst({
+    where: { ...where, status: "ACTIVE", deletedAt: null },
+    select: { id: true },
+  });
+  const record = user
+    ? await db.passwordResetToken.findFirst({
+        where: { userId: user.id, usedAt: null, expiresAt: { gt: now } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, userId: true, tokenHash: true, expiresAt: true, usedAt: true, attempts: true },
+      })
+    : null;
+  if (!record || record.usedAt || record.expiresAt <= now || record.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
+    throw new UserError("This code is invalid or expired.");
+  }
+
+  if (!(await verifyPassword(record.tokenHash, code))) {
+    await db.passwordResetToken.updateMany({
+      where: {
+        id: record.id,
+        usedAt: null,
+        expiresAt: { gt: now },
+        attempts: { lt: PASSWORD_RESET_MAX_ATTEMPTS },
+      },
+      data: { attempts: { increment: 1 } },
+    });
+    throw new UserError("The code is incorrect. Check the text message and try again.");
+  }
+
   const passwordHash = await hashPassword(password);
   await db.$transaction(async (tx) => {
-    await tx.user.update({ where: { id: record.userId }, data: { passwordHash, failedLoginCount: 0, lockedUntil: null } });
-    await tx.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } });
-    await tx.session.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+    const claimed = await tx.passwordResetToken.updateMany({
+      where: {
+        id: record.id,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+        attempts: { lt: PASSWORD_RESET_MAX_ATTEMPTS },
+      },
+      data: { usedAt: new Date() },
+    });
+    if (claimed.count !== 1) throw new UserError("This code is invalid or expired.");
+
+    const changedAt = new Date();
+    const updated = await tx.user.updateMany({
+      where: { id: record.userId, status: "ACTIVE", deletedAt: null },
+      data: { passwordHash, failedLoginCount: 0, lockedUntil: null },
+    });
+    if (updated.count !== 1) throw new UserError("This account is not available for password reset.");
+    await tx.session.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: changedAt } });
     await audit(tx, { actorId: record.userId, action: "account.password_reset", entityType: "user", entityId: record.userId });
   });
 }
 
-export async function changePassword(userId: string, current: string, next: string): Promise<void> {
+export async function changePassword(userId: string, next: string, currentSessionId: string): Promise<void> {
   assertPasswordPolicy(next);
-  const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { passwordHash: true } });
-  if (!user.passwordHash || !(await verifyPassword(user.passwordHash, current))) {
-    throw new UserError("Your current password isn't right.");
-  }
   const passwordHash = await hashPassword(next);
+  const changedAt = new Date();
   await db.$transaction(async (tx) => {
-    await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+    const updated = await tx.user.updateMany({
+      where: {
+        id: userId,
+        status: "ACTIVE",
+        deletedAt: null,
+        OR: [
+          { passwordChangedAt: null },
+          { passwordChangedAt: { lte: new Date(changedAt.getTime() - PASSWORD_CHANGE_COOLDOWN_MS) } },
+        ],
+      },
+      data: { passwordHash, passwordChangedAt: changedAt },
+    });
+    if (updated.count !== 1) throw new UserError("You can change your password once every 7 days.");
+    await tx.session.updateMany({
+      where: { userId, id: { not: currentSessionId }, revokedAt: null },
+      data: { revokedAt: changedAt },
+    });
     await audit(tx, { actorId: userId, action: "account.password_changed", entityType: "user", entityId: userId });
   });
-  await revokeAllSessions(userId);
 }
 

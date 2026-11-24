@@ -117,6 +117,8 @@ model User {
   failedLoginCount   Int           @default(0)
   lockedUntil        DateTime?
   lastLoginAt        DateTime?
+  passwordChangedAt  DateTime?
+  passwordResetRequestedAt DateTime?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   deletedAt          DateTime?
@@ -196,6 +198,7 @@ model PasswordResetToken {
   tokenHash  String    @unique
   expiresAt  DateTime
   usedAt     DateTime?
+  attempts  Int       @default(0)
   createdAt  DateTime  @default(now())
 
   @@index([userId])
@@ -515,7 +518,7 @@ model SmsRecipient {
   smsMessageId     String
   smsMessage       SmsMessage  @relation(fields: [smsMessageId], references: [id], onDelete: Restrict)
   phoneE164         String
-  // Rendered text for this recipient. Activation and reset links are redacted once the carrier accepts the message.
+  // Rendered text for this recipient. Activation links and reset codes are redacted once the carrier accepts the message.
   body              String
   // The person this notice is about (student), so history can be shown per student.
   studentId         String?
