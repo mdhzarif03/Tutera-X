@@ -8,6 +8,7 @@ import { Badge, Card, EmptyState, Flash, PageHeader } from "@/components/ui";
 import { addDays, dayKey, dhakaToday, dateOnly, formatDay } from "@/lib/dates";
 import { pick } from "@/lib/params";
 import { UserError } from "@/lib/errors";
+import { SelectDropdown } from "@/components/select-dropdown";
 
 export const metadata = { title: "Attendance" };
 
@@ -71,13 +72,12 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
             <form className="flex flex-1 flex-wrap items-end gap-3" role="search">
               <div className="min-w-48 flex-1">
                 <label htmlFor="batch" className="label">Batch</label>
-                <select id="batch" name="batch" defaultValue={batchId} className="select">
-                  {batches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+                <SelectDropdown
+                  id="batch"
+                  name="batch"
+                  defaultValue={batchId}
+                  options={batches.map((b) => ({ value: b.id, label: b.name }))}
+                />
               </div>
               <div>
                 <label htmlFor="date" className="label">Day</label>

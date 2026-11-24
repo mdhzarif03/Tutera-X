@@ -10,6 +10,7 @@ import { formatDateTime } from "@/lib/dates";
 import { pick } from "@/lib/params";
 import { shortMessagesLeft } from "@/lib/sms/balance";
 import { db } from "@/lib/db";
+import { SelectDropdown } from "@/components/select-dropdown";
 
 export const metadata = { title: "Messages" };
 
@@ -124,12 +125,13 @@ export default async function SmsPage({ searchParams }: { searchParams: Promise<
                 <label className="flex items-center gap-2 text-sm"><input type="radio" name="target" value="student" className="accent-indigo-600" /> One student</label>
                 <div className="ml-6">
                   <label htmlFor="studentId" className="sr-only">Student</label>
-                  <select id="studentId" name="studentId" className="select max-w-sm" defaultValue="">
-                    <option value="">Choose a student</option>
-                    {students.rows.map((r) => (
-                      <option key={r.student.userId} value={r.student.userId}>{r.student.user.name}</option>
-                    ))}
-                  </select>
+                  <SelectDropdown
+                    id="studentId"
+                    name="studentId"
+                    className="max-w-sm"
+                    placeholder="Choose a student"
+                    options={students.rows.map((r) => ({ value: r.student.userId, label: r.student.user.name }))}
+                  />
                 </div>
               </fieldset>
 

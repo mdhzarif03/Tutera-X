@@ -6,6 +6,7 @@ import { Badge, Card, EmptyState, Flash, PageHeader, Stat } from "@/components/u
 import { dhakaPeriod, monthLabel } from "@/lib/dates";
 import { formatTaka } from "@/lib/money";
 import { pick } from "@/lib/params";
+import { SelectDropdown } from "@/components/select-dropdown";
 
 export const metadata = { title: "Payments" };
 
@@ -99,13 +100,18 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                               </div>
                               <div>
                                 <label htmlFor={`met-${r.studentId}`} className="label">How was it paid?</label>
-                                <select id={`met-${r.studentId}`} name="method" defaultValue="CASH" className="select">
-                                  <option value="CASH">Cash</option>
-                                  <option value="BKASH">bKash</option>
-                                  <option value="NAGAD">Nagad</option>
-                                  <option value="BANK_TRANSFER">Bank transfer</option>
-                                  <option value="OTHER">Other</option>
-                                </select>
+                                <SelectDropdown
+                                  id={`met-${r.studentId}`}
+                                  name="method"
+                                  defaultValue="CASH"
+                                  options={[
+                                    { value: "CASH", label: "Cash" },
+                                    { value: "BKASH", label: "bKash" },
+                                    { value: "NAGAD", label: "Nagad" },
+                                    { value: "BANK_TRANSFER", label: "Bank transfer" },
+                                    { value: "OTHER", label: "Other" },
+                                  ]}
+                                />
                               </div>
                               <button type="submit" className="btn btn-primary w-full">
                                 Save payment

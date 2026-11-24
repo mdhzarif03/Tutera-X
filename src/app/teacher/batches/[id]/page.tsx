@@ -14,6 +14,7 @@ import { Badge, Card, EmptyState, Field, Flash, PageHeader } from "@/components/
 import { ConfirmAction } from "@/components/confirm-action";
 import { pick } from "@/lib/params";
 import { UserError } from "@/lib/errors";
+import { SelectDropdown } from "@/components/select-dropdown";
 
 export const metadata = { title: "Batch" };
 
@@ -106,9 +107,13 @@ export default async function BatchPage({
               <input type="hidden" name="batchId" value={batch.id} />
               <div className="sm:col-span-2">
                 <label htmlFor="weekday" className="label">Day</label>
-                <select id="weekday" name="weekday" className="select" required>
-                  {DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
-                </select>
+                <SelectDropdown
+                  id="weekday"
+                  name="weekday"
+                  required
+                  placeholder="Choose a day"
+                  options={DAYS.map((day, index) => ({ value: String(index), label: day }))}
+                />
               </div>
               <div><label htmlFor="start" className="label">Start</label><input id="start" name="start" type="time" required className="input" /></div>
               <div><label htmlFor="end" className="label">End</label><input id="end" name="end" type="time" required className="input" /></div>

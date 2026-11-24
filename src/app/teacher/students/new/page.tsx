@@ -5,6 +5,7 @@ import { listBatches } from "@/services/batches";
 import { Card, Field, Flash, PageHeader } from "@/components/ui";
 import { ClassFields } from "@/components/class-fields";
 import { pick } from "@/lib/params";
+import { SelectDropdown } from "@/components/select-dropdown";
 
 export const metadata = { title: "Add student" };
 
@@ -37,12 +38,15 @@ export default async function NewStudentPage({ searchParams }: { searchParams: P
           </Field>
           <div className="sm:col-span-2">
             <Field label="Batch (optional)" htmlFor="batchId">
-              <select id="batchId" name="batchId" className="select" defaultValue="">
-                <option value="">Not now</option>
-                {batches.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
+              <SelectDropdown
+                id="batchId"
+                name="batchId"
+                defaultValue=""
+                options={[
+                  { value: "", label: "Not now" },
+                  ...batches.map((b) => ({ value: b.id, label: b.name })),
+                ]}
+              />
             </Field>
           </div>
           <div className="flex items-center gap-3 sm:col-span-2">
