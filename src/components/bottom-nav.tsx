@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { LayoutGrid, LogOut, Settings, User, X } from "lucide-react";
 import { logoutAction } from "@/actions/auth";
 import { navIcon, type NavItem } from "./nav-links";
-import { InstallSheetItem } from "./install-app-button";
 
 const PRIMARY_SLOTS = 4;
 
@@ -152,7 +151,6 @@ export function BottomNav({
             ) : null}
 
             <div className="space-y-2 border-t border-slate-100 pt-4">
-              <InstallSheetItem />
               <Link
                 href={settingsHref}
                 className="flex min-h-12 items-center gap-3 rounded-2xl bg-slate-50 px-4 text-sm font-semibold text-slate-800 ring-1 ring-inset ring-slate-200 active:scale-[0.99]"

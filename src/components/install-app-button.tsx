@@ -65,8 +65,9 @@ export function InstallMenuItem({ onDone }: { onDone?: () => void }) {
   const [help, setHelp] = useState(false);
   if (!ready || installed) return null;
 
+  // Desktop only: on phones the header avatar also opens this menu, and there the entry lives in More.
   return (
-    <div>
+    <div className="hidden md:block">
       <button
         type="button"
         role="menuitem"
@@ -84,30 +85,6 @@ export function InstallMenuItem({ onDone }: { onDone?: () => void }) {
         Install app
       </button>
       {help ? <p className="px-3 pb-2 text-xs leading-relaxed text-slate-500">{instructions}</p> : null}
-    </div>
-  );
-}
-
-/** A row for the phone "More" sheet. Sits above Settings. */
-export function InstallSheetItem() {
-  const { ready, installed, canPrompt, prompt, instructions } = useInstallApp();
-  const [help, setHelp] = useState(false);
-  if (!ready || installed) return null;
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={async () => {
-          if (canPrompt) await prompt();
-          else setHelp((v) => !v);
-        }}
-        className="flex min-h-12 w-full items-center gap-3 rounded-2xl bg-slate-50 px-4 text-left text-sm font-semibold text-slate-800 ring-1 ring-inset ring-slate-200 active:scale-[0.99]"
-      >
-        <Download className="h-5 w-5 text-slate-500" aria-hidden="true" />
-        Install app
-      </button>
-      {help ? <p className="px-2 pt-2 text-xs leading-relaxed text-slate-500">{instructions}</p> : null}
     </div>
   );
 }

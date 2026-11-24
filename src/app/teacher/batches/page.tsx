@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { CalendarClock, MessageCircle, Plus, Search, Users } from "lucide-react";
+import { CalendarClock, MessageCircle, Search, Users } from "lucide-react";
 import { requireRole } from "@/lib/auth/guards";
 import { createBatchAction } from "@/actions/teacher";
 import { listBatches } from "@/services/batches";
-import { Badge, Card, EmptyState, Field, Flash, PageHeader } from "@/components/ui";
+import { Badge, Card, EmptyState, Flash, PageHeader } from "@/components/ui";
+import { NewBatchDialog } from "@/components/new-batch-dialog";
 import { pick } from "@/lib/params";
 
 export const metadata = { title: "Batches" };
@@ -16,7 +17,11 @@ export default async function BatchesPage({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <PageHeader title="Batches" description="Groups of students who learn together." />
+      <PageHeader
+        title="Batches"
+        description="Groups of students who learn together."
+        actions={<NewBatchDialog action={createBatchAction} defaultOpen={!!pick(sp, "error")} />}
+      />
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
 
       <Card
@@ -103,25 +108,6 @@ export default async function BatchesPage({ searchParams }: { searchParams: Prom
           </div>
         ) : null}
       </Card>
-
-      <details className="group mt-6">
-        <summary className="btn btn-primary inline-flex w-full cursor-pointer list-none items-center justify-center gap-2 sm:w-auto">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          <span className="group-open:hidden">New batch</span>
-          <span className="hidden group-open:inline">Hide form</span>
-        </summary>
-        <Card title="New batch" className="mt-4 max-w-xl">
-          <form action={createBatchAction} className="grid gap-3">
-            <Field label="Batch name" htmlFor="name"><input id="name" name="name" required maxLength={80} className="input" placeholder="Morning A" /></Field>
-            <Field label="Class" htmlFor="className"><input id="className" name="className" required maxLength={40} className="input" placeholder="Class 9" /></Field>
-            <Field label="Subject (optional)" htmlFor="subject"><input id="subject" name="subject" maxLength={60} className="input" /></Field>
-            <Field label="WhatsApp group link (optional)" htmlFor="whatsappLink" hint="Students in this batch will see a button to join the group.">
-              <input id="whatsappLink" name="whatsappLink" type="text" inputMode="url" maxLength={200} className="input" placeholder="https://chat.whatsapp.com/…" />
-            </Field>
-            <button className="btn btn-primary" type="submit">Create batch</button>
-          </form>
-        </Card>
-      </details>
     </>
   );
 }
