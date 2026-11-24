@@ -46,6 +46,8 @@ This runs `prisma validate`, then `prisma migrate diff --from-migrations prisma/
 
 After any schema change, add a migration with `npx prisma migrate dev --name <change>`. Never edit a migration that has been applied.
 
+`npm run build` only generates Prisma Client and builds Next.js; it does not apply migrations. For a production release that needs schema changes, review the additive migration and run `npm run db:deploy` against the intended database before switching application code. Do not put production migration execution into the build step.
+
 Migrations in order:
 
 - `20261122180000_init`: the initial schema. Applied or not, it must not be edited, because Prisma checksums applied migrations. `scripts/generate-initial-migration.py` refuses to overwrite it.
@@ -89,6 +91,7 @@ The activation and invitation exchanges require JavaScript. Without it, the page
 - **Retries are bounded.** Unexpected processing errors use capped exponential backoff and eventually become `FAILED_PERMANENT`; invalid job payloads and missing recipients are recorded as permanent failures.
 - **Shutdown.** On SIGTERM or SIGINT the runner stops polling and waits for the current pass to finish before the process exits.
 - Alternative: set `JOB_RUNNER=off` and call `POST /api/jobs/run` every minute with `Authorization: Bearer $CRON_SECRET`.
+- The checked-in Vercel schedule runs once daily at 03:00 UTC. On a plan that limits cron frequency, `JOB_RUNNER=off` therefore delays queued messages until that run; use a higher-frequency Vercel cron plan or an external scheduler for near-real-time delivery.
 - Webhook: register `https://<domain>/api/webhooks/nishchit` with `NISHCHIT_WEBHOOK_SECRET`. Signatures are checked with a five-minute window.
 
 ## Design system

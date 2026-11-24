@@ -10,6 +10,18 @@ import { normalizeBdPhone } from "@/lib/phone";
 import { queueSms } from "@/lib/sms/service";
 import { render, templates } from "@/lib/sms/templates";
 
+async function assertOwner(actorId: string): Promise<void> {
+  const actor = await db.teacherProfile.findFirst({
+    where: {
+      userId: actorId,
+      role: "OWNER",
+      user: { role: "TEACHER", status: "ACTIVE", deletedAt: null },
+    },
+    select: { userId: true },
+  });
+  if (!actor) throw new UserError("Only the owner can manage teacher invitations and access.");
+}
+
 export async function listTeachers() {
   return db.user.findMany({
     where: { role: "TEACHER", deletedAt: null },
@@ -26,9 +38,9 @@ export async function listTeachers() {
   });
 }
 
-export async function listInvitations() {
+export async function listInvitations(invitedById: string) {
   return db.teacherInvitation.findMany({
-    where: { acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+    where: { invitedById, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: "desc" },
     select: { id: true, email: true, phoneE164: true, expiresAt: true, invitedById: true },
   });
@@ -36,6 +48,7 @@ export async function listInvitations() {
 
 /** Creates an invitation and queues its one-time link to the teacher's phone. */
 export async function inviteTeacher(actorId: string, phoneRaw: string): Promise<void> {
+  await assertOwner(actorId);
   const phoneE164 = normalizeBdPhone(requireText(phoneRaw, "Phone number", 20));
   const existing = await db.user.findUnique({ where: { phoneE164 }, select: { id: true } });
   if (existing) throw new UserError("This phone number already has an account.");
@@ -84,6 +97,7 @@ export function inviteUrl(token: string): string {
 }
 
 export async function revokeInvitation(actorId: string, invitationId: string): Promise<void> {
+  await assertOwner(actorId);
   const inv = await db.teacherInvitation.findFirst({ where: { id: invitationId, invitedById: actorId, acceptedAt: null } });
   if (!inv) throw new UserError("Invitation not found.");
   await db.teacherInvitation.update({ where: { id: inv.id }, data: { revokedAt: new Date() } });
@@ -144,8 +158,7 @@ export async function acceptInvitation(
 }
 
 export async function setTeacherActive(actorId: string, targetId: string, active: boolean): Promise<void> {
-  const actor = await db.teacherProfile.findUnique({ where: { userId: actorId }, select: { role: true } });
-  if (actor?.role !== "OWNER") throw new UserError("Only the owner can turn teachers' access on or off.");
+  await assertOwner(actorId);
   if (actorId === targetId) throw new UserError("You can't change your own access.");
   const target = await db.user.findFirst({
     where: { id: targetId, role: "TEACHER" },

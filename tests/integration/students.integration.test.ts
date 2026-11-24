@@ -15,6 +15,7 @@ interface Fixture {
   teacherId: string;
   phone: string;
   studentIds: string[];
+  batchIds: string[];
   extraUserIds: string[];
 }
 
@@ -47,11 +48,31 @@ describe("PostgreSQL: student creation", { skip: testDatabaseUrl ? false : testD
       assert.equal(user.studentProfile?.guardian.phoneE164, fixture.phone);
       assert.equal(user.studentProfile?.className, "Class 8");
       assert.equal(await db.teacherStudent.count({ where: { teacherId: fixture.teacherId, studentId: result.studentId } }), 1);
+      assert.equal(await db.batchStudent.count({ where: { studentId: result.studentId } }), 0, "an omitted optional batch creates no membership");
       assert.equal(await db.studentActivation.count({ where: { userId: result.studentId } }), 1);
 
       const recipient = await db.smsRecipient.findFirstOrThrow({ where: { studentId: result.studentId } });
       assert.equal(recipient.status, "QUEUED");
       assert.equal(await db.notificationJob.count({ where: { dedupeKey: `sms:${recipient.id}` } }), 1);
+    } finally {
+      await cleanupFixture(fixture);
+    }
+  });
+
+  test("assigns the new student to the selected teacher-owned batch", async () => {
+    const fixture = await createFixture();
+    try {
+      const batch = await db.batch.create({
+        data: { teacherId: fixture.teacherId, name: `Integration batch ${randomUUID()}`, className: "Class 8" },
+      });
+      fixture.batchIds.push(batch.id);
+      const result = await createStudent(fixture.teacherId, { ...studentInput(fixture.phone), batchId: batch.id });
+      fixture.studentIds.push(result.studentId);
+
+      const membership = await db.batchStudent.findUniqueOrThrow({
+        where: { batchId_studentId: { batchId: batch.id, studentId: result.studentId } },
+      });
+      assert.equal(membership.leftAt, null);
     } finally {
       await cleanupFixture(fixture);
     }
@@ -130,7 +151,7 @@ async function createFixture(): Promise<Fixture> {
     },
     select: { id: true },
   });
-  return { teacherId: user.id, phone, studentIds: [], extraUserIds: [] };
+  return { teacherId: user.id, phone, studentIds: [], batchIds: [], extraUserIds: [] };
 }
 
 async function cleanupFixture(fixture: Fixture): Promise<void> {
@@ -147,6 +168,7 @@ async function cleanupFixture(fixture: Fixture): Promise<void> {
   await db.batchStudent.deleteMany({ where: { studentId: { in: fixture.studentIds } } });
   await db.teacherStudent.deleteMany({ where: { studentId: { in: fixture.studentIds } } });
   await db.teacherStudent.deleteMany({ where: { teacherId: fixture.teacherId } });
+  await db.batch.deleteMany({ where: { id: { in: fixture.batchIds } } });
   await db.auditLog.deleteMany({ where: { actorId: fixture.teacherId } });
   await db.studentProfile.deleteMany({ where: { userId: { in: fixture.studentIds } } });
   await db.guardian.deleteMany({ where: { phoneE164: fixture.phone } });
