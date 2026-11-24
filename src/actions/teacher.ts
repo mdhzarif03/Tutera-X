@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { PaymentMethod } from "@prisma/client";
 import { requireRole } from "@/lib/auth/guards";
@@ -8,7 +9,7 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { fields, fieldsWithPrefix, str, strs } from "@/lib/form";
 import { requireId, requireNumber, requireText } from "@/lib/validate";
-import { UserError } from "@/lib/errors";
+import { requestIdFromHeaders, UserError } from "@/lib/errors";
 import * as students from "@/services/students";
 import * as batches from "@/services/batches";
 import * as attendance from "@/services/attendance";
@@ -28,13 +29,18 @@ async function teacher() {
 
 export async function createStudentAction(formData: FormData): Promise<void> {
   const t = await teacher();
+  const requestId = requestIdFromHeaders(await headers());
   return runAction("/teacher/students/new", async () => {
     const input = students.parseStudentInput(fields(formData));
-    const r = await students.createStudent(t.id, input);
+    const r = await students.createStudent(t.id, input, requestId);
     return {
       message: `Student added. Login ID: ${r.username}. Activation SMS queued.`,
       redirectTo: `/teacher/students/${r.studentId}`,
     };
+  }, {
+    operation: "student.create",
+    model: "Guardian, User, StudentProfile, TeacherStudent, BatchStudent, StudentActivation, SmsRecipient, NotificationJob, AuditLog",
+    requestId,
   });
 }
 

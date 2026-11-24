@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import { UserError, isUniqueViolation } from "@/lib/errors";
+import { logUnexpectedError, UserError, isForeignKeyViolation, isUniqueViolation } from "@/lib/errors";
 import { normalizeBdPhone } from "@/lib/phone";
 import { randomToken, sha256 } from "@/lib/crypto";
 import { audit } from "@/lib/audit";
@@ -53,24 +53,22 @@ function activationLink(token: string): string {
   return `${getEnv().APP_URL.replace(/\/$/, "")}/activate#${token}`;
 }
 
-export async function createStudent(teacherId: string, input: StudentInput): Promise<{ studentId: string; username: string }> {
-  const duplicate = await db.studentProfile.findFirst({
-    where: {
-      archivedAt: null,
-      guardian: { phoneE164: input.guardianPhone },
-      user: { name: { equals: input.name, mode: "insensitive" } },
-      teachers: { some: { teacherId } },
-    },
+export async function createStudent(
+  teacherId: string,
+  input: StudentInput,
+  requestId?: string,
+): Promise<{ studentId: string; username: string }> {
+  const teacher = await db.teacherProfile.findFirst({
+    where: { userId: teacherId, user: { role: "TEACHER", status: "ACTIVE", deletedAt: null } },
     select: { userId: true },
   });
-  if (duplicate) {
-    throw new UserError("This student is already saved. Add them to the batch instead.");
-  }
+  if (!teacher) throw new UserError("You don't have permission to add students.");
   if (input.batchId) await assertBatchOwned(teacherId, input.batchId);
 
   const studentId = randomUUID();
   const token = randomToken(32);
   const initials = usernameInitials(input.name);
+  const duplicateLockKey = JSON.stringify([teacherId, input.guardianPhone]);
 
   for (let attempt = 0; attempt < 10; attempt++) {
     const number = randomUsernameNumber();
@@ -79,6 +77,27 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
     try {
       const created = await db.$transaction(
         async (tx) => {
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${duplicateLockKey}, 0))`;
+          if (input.batchId) {
+            const batch = await tx.batch.findFirst({
+              where: { id: input.batchId, teacherId },
+              select: { id: true },
+            });
+            if (!batch) throw new UserError("Batch not found.");
+          }
+          const duplicate = await tx.studentProfile.findFirst({
+            where: {
+              archivedAt: null,
+              guardian: { phoneE164: input.guardianPhone },
+              user: { name: { equals: input.name, mode: "insensitive" } },
+              teachers: { some: { teacherId } },
+            },
+            select: { userId: true },
+          });
+          if (duplicate) {
+            throw new UserError("This student is already saved. Add them to the batch instead.");
+          }
+
           await tx.$queryRaw`SELECT pg_advisory_xact_lock(${BigInt(number)})`;
           const usedNumber = await tx.user.findFirst({
             where: { username: { endsWith: `-${number}` } },
@@ -138,9 +157,34 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
       );
       if (created) return { studentId, username };
     } catch (err) {
+      if (isForeignKeyViolation(err)) {
+        logUnexpectedError("[student] related record constraint failed", {
+          operation: "student.create",
+          model: "StudentProfile, TeacherStudent, BatchStudent",
+          requestId,
+        }, err);
+        throw new UserError("The selected batch or teacher is no longer available. Refresh and try again.");
+      }
       if (!isUniqueViolation(err)) throw err;
       const usernameTaken = await db.user.findUnique({ where: { username }, select: { id: true } });
-      if (!usernameTaken) throw new UserError("This phone number is already in use.");
+      if (usernameTaken) continue;
+
+      const duplicate = await db.studentProfile.findFirst({
+        where: {
+          archivedAt: null,
+          guardian: { phoneE164: input.guardianPhone },
+          user: { name: { equals: input.name, mode: "insensitive" } },
+          teachers: { some: { teacherId } },
+        },
+        select: { userId: true },
+      });
+      if (duplicate) throw new UserError("This student is already saved. Add them to the batch instead.");
+      logUnexpectedError("[student] unique constraint failed", {
+        operation: "student.create",
+        model: "User, Guardian, TeacherStudent",
+        requestId,
+      }, err);
+      throw new UserError("A conflicting record already exists. Check the student details and try again.");
     }
   }
   throw new UserError("Could not allocate a unique login ID. Please try again.");

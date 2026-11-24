@@ -83,8 +83,9 @@ The exchange requires JavaScript. Without it, the page cannot read the fragment.
 
 - Startup work (creating the owner account from `.env` if missing, and starting the SMS runner) runs on the first request to each server process. It is logged, for example `[bootstrap] created: ...`, and retried on later requests if it fails. A server with no traffic does not start its runner until something requests a page, so a production deployment should receive one request after each start, or use the cron route below.
 - SMS jobs live in PostgreSQL. With `JOB_RUNNER=on` (the default) each instance polls for due jobs every five seconds.
-- **Safe with several instances.** Each job is claimed by one conditional UPDATE, so exactly one worker in one instance runs it. A claim carries a lock (two minutes). If a worker crashes, its job, including one still marked `RUNNING`, becomes claimable when the lock expires.
+- **Safe with several instances.** A conditional UPDATE atomically claims each job and increments its attempt number. Result writes are fenced by that number, so an expired worker cannot overwrite a newer worker's state. A claim carries a lock (two minutes); a crashed worker's job becomes claimable when the lock expires.
 - **Delivery is at-least-once.** A reclaimed send reuses the recipient's idempotency key, so Nishchit returns the original message instead of sending another. Settlement is idempotent, so a repeated pass cannot double-charge the allowance.
+- **Retries are bounded.** Unexpected processing errors use capped exponential backoff and eventually become `FAILED_PERMANENT`; invalid job payloads and missing recipients are recorded as permanent failures.
 - **Shutdown.** On SIGTERM or SIGINT the runner stops polling and waits for the current pass to finish before the process exits.
 - Alternative: set `JOB_RUNNER=off` and call `POST /api/jobs/run` every minute with `Authorization: Bearer $CRON_SECRET`.
 - Webhook: register `https://<domain>/api/webhooks/nishchit` with `NISHCHIT_WEBHOOK_SECRET`. Signatures are checked with a five-minute window.
@@ -115,7 +116,7 @@ npm run typecheck
 
 `npm test` covers phone rules, SMS segmentation, Dhaka time, webhook signatures, templates, validation, environment parsing, pricing (including fallback when the provider is unreachable), the message balance, and invitation token format.
 
-`npm run test:integration` covers, against real PostgreSQL: queueing one row and one job per recipient, idempotent queueing, exclusive job claims, and stale-lock reclaim. Without `TEST_DATABASE_URL` it reports one skipped entry, not a pass.
+`npm run test:integration` covers student creation and PostgreSQL queue/job behavior. It only connects when `TEST_DATABASE_URL` points to a loopback database whose name contains `test` and differs from `DATABASE_URL`; otherwise it reports skipped tests, not passes.
 
 ## Delivery and cost notes
 

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { getEnv } from "@/lib/env";
 import { runDueJobs } from "@/lib/jobs";
+import { requestIdFromHeaders } from "@/lib/errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function POST(request: Request): Promise<Response> {
   const b = Buffer.from(expected);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return new Response("Unauthorized", { status: 401 });
 
-  const processed = await runDueJobs(50);
+  const processed = await runDueJobs(50, requestIdFromHeaders(request.headers));
   return Response.json({ processed });
 }
 

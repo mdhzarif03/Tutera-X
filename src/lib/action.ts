@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { UserError } from "./errors";
+import { UserError, logUnexpectedError, type ErrorLogContext } from "./errors";
 
 export interface ActionOutcome {
   message?: string;
@@ -20,6 +20,7 @@ function withFlash(path: string, kind: "msg" | "error", text: string): string {
 export async function runAction(
   basePath: string,
   fn: () => Promise<ActionOutcome | void>,
+  logContext: ErrorLogContext = { operation: "server_action" },
 ): Promise<never> {
   let kind: "msg" | "error" = "msg";
   let text = "Saved.";
@@ -33,7 +34,7 @@ export async function runAction(
     if (err instanceof UserError) {
       text = err.message;
     } else {
-      console.error("[action] failed:", basePath, err instanceof Error ? err.name : "unknown error");
+      logUnexpectedError("[action] failed", logContext, err);
       text = "Something went wrong. Please try again.";
     }
   }

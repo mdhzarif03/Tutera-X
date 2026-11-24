@@ -101,13 +101,6 @@ async function finalize(recipientId: string, data: Prisma.SmsRecipientUpdateInpu
   await db.smsRecipient.update({ where: { id: recipientId }, data });
 }
 
-async function requeue(recipientId: string, e: NishchitError): Promise<void> {
-  await db.smsRecipient.update({
-    where: { id: recipientId },
-    data: { status: "QUEUED", lastErrorCode: e.code, lastRequestId: e.requestId },
-  });
-}
-
 /**
  * Submits one recipient to Nishchit and records the outcome. Safe to repeat: the recipient's
  * idempotency key means a retry after a timeout cannot create a second message.
@@ -124,7 +117,7 @@ export async function deliverRecipient(recipientId: string, attempt: number): Pr
       smsMessage: { select: { purpose: true } },
     },
   });
-  if (!r) return { kind: "done" };
+  if (!r) return { kind: "permanent", reason: "recipient_not_found" };
   if (r.status !== "QUEUED" && r.status !== "SUBMITTING") return { kind: "done" };
 
   if (!liveSendingAllowed()) {
@@ -132,21 +125,44 @@ export async function deliverRecipient(recipientId: string, attempt: number): Pr
     return { kind: "done" };
   }
 
-  await db.smsRecipient.update({ where: { id: r.id }, data: { status: "SUBMITTING" } });
+  const started = await db.smsRecipient.updateMany({
+    where: { id: r.id, status: { in: ["QUEUED", "SUBMITTING"] } },
+    data: { status: "SUBMITTING" },
+  });
+  if (started.count !== 1) return { kind: "done" };
 
+  let m: Awaited<ReturnType<typeof sendMessage>>;
   try {
-    const m = await sendMessage({ to: r.phoneE164, body: r.body, reference: r.id, idempotencyKey: r.idempotencyKey });
+    m = await sendMessage({ to: r.phoneE164, body: r.body, reference: r.id, idempotencyKey: r.idempotencyKey });
+  } catch (err) {
+    if (!(err instanceof NishchitError)) throw err;
+    return recordProviderError(r.id, attempt, err);
+  }
 
-    if (m.status === "failed") {
-      const code = m.error?.code ?? "failed";
-      await finalize(r.id, { status: "FAILED", failedAt: new Date(), lastErrorCode: code });
-      return { kind: "permanent", reason: code };
-    }
+  if (m.status === "failed") {
+    const code = m.error?.code ?? "failed";
+    await db.$transaction(async (tx) => {
+      await tx.smsRecipient.updateMany({
+        where: { id: r.id, status: { in: ["QUEUED", "SUBMITTING"] } },
+        data: {
+          status: "FAILED",
+          failedAt: new Date(),
+          lastErrorCode: code,
+          ...(SENSITIVE.has(r.smsMessage.purpose) ? { body: REDACTED } : {}),
+        },
+      });
+      await tx.smsDeliveryAttempt.create({
+        data: { smsRecipientId: r.id, attemptNumber: attempt, httpStatus: 201, retryable: false, errorCode: code },
+      });
+    });
+    return { kind: "permanent", reason: code };
+  }
 
-    const sent = m.status === "sent";
-    const now = new Date();
-    await db.smsRecipient.update({
-      where: { id: r.id },
+  const sent = m.status === "sent";
+  const now = new Date();
+  await db.$transaction(async (tx) => {
+    await tx.smsRecipient.updateMany({
+      where: { id: r.id, status: { in: ["QUEUED", "SUBMITTING"] } },
       data: {
         status: sent ? "SENT" : "ACCEPTED",
         nishchitMessageId: m.id,
@@ -158,57 +174,73 @@ export async function deliverRecipient(recipientId: string, attempt: number): Pr
         ...(SENSITIVE.has(r.smsMessage.purpose) ? { body: REDACTED } : {}),
       },
     });
-    await db.smsDeliveryAttempt.create({
+    await tx.smsDeliveryAttempt.create({
       data: { smsRecipientId: r.id, attemptNumber: attempt, httpStatus: 201, retryable: false },
     });
-    return { kind: "done" };
-  } catch (err) {
-    const e = err instanceof NishchitError ? err : new NishchitError("unknown", "Unexpected error.", 0, true);
-    await db.smsDeliveryAttempt
-      .create({
-        data: {
-          smsRecipientId: r.id,
-          attemptNumber: attempt,
-          httpStatus: e.httpStatus || null,
-          errorCode: e.code,
-          retryable: e.retryable,
-          requestId: e.requestId,
-        },
-      })
-      .catch(() => undefined);
+  });
+  return { kind: "done" };
+}
 
-    switch (e.code) {
-      case "daily_quota_exceeded":
-        // This is the provider's own daily limit on the account, not a per-teacher limit.
-        await requeue(r.id, e);
-        return { kind: "retry", at: nextDhakaMidnight(), reason: e.code };
-
-      case "insufficient_credits":
-      case "authentication_failed":
-      case "not_configured":
-        await requeue(r.id, e);
-        if (e.code !== "insufficient_credits") console.error("[sms] provider configuration problem. Check NISHCHIT_API_KEY.");
-        return { kind: "retry", at: addMinutes(new Date(), 60), reason: e.code };
-
-      case "content_rejected":
-        await finalize(r.id, { status: "SKIPPED", skipReason: e.code, lastErrorCode: e.code, lastRequestId: e.requestId });
-        return { kind: "permanent", reason: e.code };
-
-      case "invalid_recipient":
-      case "unsupported_country":
-      case "invalid_sender":
-        await finalize(r.id, { status: "FAILED", failedAt: new Date(), lastErrorCode: e.code, lastRequestId: e.requestId });
-        return { kind: "permanent", reason: e.code };
-
-      default:
-        if (e.retryable && attempt < MAX_ATTEMPTS) {
-          await requeue(r.id, e);
-          return { kind: "retry", at: new Date(Date.now() + backoffMs(attempt)), reason: e.code };
-        }
-        await finalize(r.id, { status: "FAILED", failedAt: new Date(), lastErrorCode: e.code, lastRequestId: e.requestId });
-        return { kind: "permanent", reason: e.code };
-    }
+async function recordProviderError(recipientId: string, attempt: number, error: NishchitError): Promise<DeliveryOutcome> {
+  const now = new Date();
+  let status: "QUEUED" | "FAILED" | "SKIPPED";
+  let retryAt: Date | null = null;
+  switch (error.code) {
+    case "daily_quota_exceeded":
+      status = "QUEUED";
+      retryAt = nextDhakaMidnight();
+      break;
+    case "insufficient_credits":
+    case "authentication_failed":
+    case "not_configured":
+      status = "QUEUED";
+      retryAt = addMinutes(now, 60);
+      if (error.code !== "insufficient_credits") console.error("[sms] provider configuration problem. Check NISHCHIT_API_KEY.");
+      break;
+    case "content_rejected":
+      status = "SKIPPED";
+      break;
+    case "invalid_recipient":
+    case "unsupported_country":
+    case "invalid_sender":
+      status = "FAILED";
+      break;
+    default:
+      if (error.retryable && attempt < MAX_ATTEMPTS) {
+        status = "QUEUED";
+        retryAt = new Date(now.getTime() + backoffMs(attempt));
+      } else {
+        status = "FAILED";
+      }
   }
+
+  await db.$transaction(async (tx) => {
+    await tx.smsRecipient.updateMany({
+      where: { id: recipientId, status: { in: ["QUEUED", "SUBMITTING"] } },
+      data: {
+        status,
+        ...(retryAt ? { lastErrorCode: error.code, lastRequestId: error.requestId } : {
+          failedAt: status === "FAILED" ? now : undefined,
+          skipReason: status === "SKIPPED" ? error.code : undefined,
+          lastErrorCode: error.code,
+          lastRequestId: error.requestId,
+        }),
+      },
+    });
+    await tx.smsDeliveryAttempt.create({
+      data: {
+        smsRecipientId: recipientId,
+        attemptNumber: attempt,
+        httpStatus: error.httpStatus || null,
+        errorCode: error.code,
+        retryable: error.retryable,
+        requestId: error.requestId,
+      },
+    });
+  });
+
+  if (retryAt) return { kind: "retry", at: retryAt, reason: error.code };
+  return { kind: "permanent", reason: error.code };
 }
 
 export interface WebhookEvent {

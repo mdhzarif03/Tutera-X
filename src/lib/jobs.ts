@@ -1,14 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
+import { logUnexpectedError, prismaRetryReason } from "@/lib/errors";
+import { retryDelayMs, smsRecipientIdFromPayload } from "@/lib/job-utils";
 import { deliverRecipient } from "@/lib/sms/service";
 
 /**
- * Persistent job runner. Safe with any number of application instances:
- *
- * - Every job is claimed by one conditional UPDATE. Only one worker, in one instance, wins a claim.
- * - A claim carries a lock expiry. If the worker dies, the job becomes claimable again once the lock
- *   expires. That includes jobs still marked RUNNING, which an earlier version never reclaimed.
- * - Delivery is at-least-once. A reclaimed send reuses the recipient's idempotency key, so Nishchit
- *   returns the original message instead of sending a second one. Settlement is idempotent too.
+ * Persistent job runner. Claims are fenced by their incrementing attempt number. Provider calls
+ * remain at-least-once, with the recipient's idempotency key preventing duplicate SMS delivery.
  */
 
 export const LOCK_MS = 2 * 60 * 1000;
@@ -20,9 +18,9 @@ interface RunnerState {
 }
 const state = globalThis as unknown as { __txJobRunner?: RunnerState };
 
-/** Claims one job if it is due and unlocked. Returns its attempt number, or null if another worker has it. */
+/** Claims one due job and returns its exact fencing/attempt number. */
 export async function claimJob(jobId: string, now: Date = new Date()): Promise<number | null> {
-  const claimed = await db.notificationJob.updateMany({
+  const claimed = await db.notificationJob.updateManyAndReturn({
     where: {
       id: jobId,
       runAfter: { lte: now },
@@ -32,53 +30,61 @@ export async function claimJob(jobId: string, now: Date = new Date()): Promise<n
       ],
     },
     data: { status: "RUNNING", lockedUntil: new Date(now.getTime() + LOCK_MS), attempts: { increment: 1 } },
+    select: { attempts: true },
   });
-  if (claimed.count !== 1) return null;
-  const row = await db.notificationJob.findUnique({ where: { id: jobId }, select: { attempts: true } });
-  return row?.attempts ?? null;
+  return claimed[0]?.attempts ?? null;
 }
 
-async function processJob(
-  job: { id: string; kind: string; payload: unknown; maxAttempts: number },
-  attempt: number,
-): Promise<void> {
+type Job = { id: string; kind: string; payload: unknown; maxAttempts: number };
+type JobResult =
+  | { kind: "done"; smsRecipientId: string | null }
+  | { kind: "retry"; at: Date; reason: string; smsRecipientId: string | null }
+  | { kind: "permanent"; reason: string; smsRecipientId: string | null };
+
+async function processJob(job: Job, attempt: number): Promise<JobResult> {
   if (job.kind !== "send_sms_recipient") {
-    await db.notificationJob.update({
-      where: { id: job.id },
-      data: { status: "FAILED_PERMANENT", lockedUntil: null, lastError: "unknown job kind" },
-    });
-    return;
+    return { kind: "permanent", reason: "unknown_job_kind", smsRecipientId: null };
   }
 
-  const { smsRecipientId } = job.payload as { smsRecipientId: string };
+  const smsRecipientId = smsRecipientIdFromPayload(job.payload);
+  if (!smsRecipientId) {
+    return { kind: "permanent", reason: "invalid_job_payload", smsRecipientId: null };
+  }
+
   const outcome = await deliverRecipient(smsRecipientId, attempt);
+  if (outcome.kind === "done") return { kind: "done", smsRecipientId };
+  if (outcome.kind === "permanent") return { kind: "permanent", reason: outcome.reason, smsRecipientId };
+  if (attempt < job.maxAttempts) return { ...outcome, smsRecipientId };
+  return { kind: "permanent", reason: "max_attempts", smsRecipientId };
+}
 
-  if (outcome.kind === "done") {
-    await db.notificationJob.update({
-      where: { id: job.id },
-      data: { status: "SUCCEEDED", lockedUntil: null, lastError: null },
+async function persistResult(job: Job, attempt: number, result: JobResult): Promise<boolean> {
+  return db.$transaction(async (tx) => {
+    const data =
+      result.kind === "done"
+        ? { status: "SUCCEEDED" as const, lockedUntil: null, lastError: null }
+        : result.kind === "retry"
+          ? { status: "FAILED_RETRYABLE" as const, runAfter: result.at, lockedUntil: null, lastError: result.reason }
+          : { status: "FAILED_PERMANENT" as const, lockedUntil: null, lastError: result.reason };
+    const updated = await tx.notificationJob.updateMany({
+      where: { id: job.id, status: "RUNNING", attempts: attempt },
+      data,
     });
-  } else if (outcome.kind === "retry" && attempt < job.maxAttempts) {
-    await db.notificationJob.update({
-      where: { id: job.id },
-      data: { status: "FAILED_RETRYABLE", runAfter: outcome.at, lockedUntil: null, lastError: outcome.reason },
-    });
-  } else {
-    // Retries exhausted: the job and its recipient both end as failed, and any reservation is released.
-    const reason = outcome.kind === "permanent" ? outcome.reason : "max_attempts";
-    await db.notificationJob.update({
-      where: { id: job.id },
-      data: { status: "FAILED_PERMANENT", lockedUntil: null, lastError: reason },
-    });
-    await db.smsRecipient.updateMany({
-      where: { id: smsRecipientId, status: { in: ["QUEUED", "SUBMITTING"] } },
-      data: { status: "FAILED", failedAt: new Date(), lastErrorCode: reason },
-    });
-  }
+    if (updated.count !== 1) return false;
+
+    if (result.kind === "permanent" && result.smsRecipientId) {
+      await tx.smsRecipient.updateMany({
+        where: { id: result.smsRecipientId, status: { in: ["QUEUED", "SUBMITTING"] } },
+        data: { status: "FAILED", failedAt: new Date(), lastErrorCode: result.reason },
+      });
+    }
+    return true;
+  });
 }
 
 /** Processes up to `limit` due jobs. Returns how many this call claimed. */
-export async function runDueJobs(limit = 20): Promise<number> {
+export async function runDueJobs(limit = 20, requestId?: string): Promise<number> {
+  const correlationId = requestId ?? randomUUID();
   const now = new Date();
   const due = await db.notificationJob.findMany({
     where: {
@@ -90,31 +96,66 @@ export async function runDueJobs(limit = 20): Promise<number> {
     },
     orderBy: { runAfter: "asc" },
     take: limit,
-    select: { id: true },
+    select: { id: true, kind: true, payload: true, maxAttempts: true },
   });
 
   let processed = 0;
-  for (const { id } of due) {
-    const attempt = await claimJob(id);
+  for (const job of due) {
+    let attempt: number | null;
+    try {
+      attempt = await claimJob(job.id);
+    } catch (err) {
+      logUnexpectedError("[jobs] claim failed", { operation: "job.claim", jobId: job.id, requestId: correlationId }, err);
+      continue;
+    }
     if (attempt === null) continue;
-
-    const job = await db.notificationJob.findUnique({
-      where: { id },
-      select: { id: true, kind: true, payload: true, maxAttempts: true },
-    });
-    if (!job) continue;
     processed++;
 
+    let result: JobResult;
+    if (attempt > job.maxAttempts) {
+      result = { kind: "permanent", reason: "max_attempts", smsRecipientId: smsRecipientIdFromPayload(job.payload) };
+    } else {
+      try {
+        result = await processJob(job, attempt);
+      } catch (err) {
+        logUnexpectedError("[jobs] job failed unexpectedly", {
+          operation: `job.process:${job.kind}`,
+          model: job.kind === "send_sms_recipient" ? "SmsRecipient" : "NotificationJob",
+          jobId: job.id,
+          requestId: correlationId,
+        }, err);
+        result = attempt < job.maxAttempts
+          ? {
+              kind: "retry",
+              at: new Date(Date.now() + retryDelayMs(attempt)),
+              reason: prismaRetryReason(err),
+              smsRecipientId: smsRecipientIdFromPayload(job.payload),
+            }
+          : {
+              kind: "permanent",
+              reason: prismaRetryReason(err),
+              smsRecipientId: smsRecipientIdFromPayload(job.payload),
+            };
+      }
+    }
+
     try {
-      await processJob(job, attempt);
+      const saved = await persistResult(job, attempt, result);
+      if (!saved) {
+        console.warn("[jobs] stale worker result ignored", JSON.stringify({
+          operation: "job.persist_result",
+          jobId: job.id,
+          requestId: correlationId,
+          attempt,
+        }));
+      }
     } catch (err) {
-      console.error("[jobs] job failed unexpectedly:", id, err instanceof Error ? err.name : "unknown");
-      await db.notificationJob
-        .update({
-          where: { id },
-          data: { status: "FAILED_RETRYABLE", runAfter: new Date(Date.now() + 60_000), lockedUntil: null, lastError: "internal" },
-        })
-        .catch(() => undefined);
+      logUnexpectedError("[jobs] job result persistence failed", {
+        operation: "job.persist_result",
+        model: "NotificationJob",
+        jobId: job.id,
+        requestId: correlationId,
+      }, err);
     }
   }
   return processed;
@@ -125,10 +166,10 @@ export function startJobRunner(): void {
   const s = (state.__txJobRunner ??= {});
   if (s.timer) return;
   s.timer = setInterval(() => {
-    if (s.inFlight) return; // never overlap polls within one process
+    if (s.inFlight) return;
     s.inFlight = runDueJobs()
       .catch((err: unknown) => {
-        console.error("[jobs] runner error:", err instanceof Error ? err.name : "unknown");
+        logUnexpectedError("[jobs] runner error", { operation: "job.poll" }, err);
         return 0;
       })
       .finally(() => {

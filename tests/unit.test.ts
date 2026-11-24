@@ -13,6 +13,8 @@ import { assertPasswordPolicy } from "@/lib/auth/policy";
 import { UserError, isUniqueViolation } from "@/lib/errors";
 import { round2, num } from "@/lib/money";
 import { randomUsernameNumber, usernameCandidate, usernameInitials } from "@/lib/usernames";
+import { retryDelayMs, smsRecipientIdFromPayload } from "@/lib/job-utils";
+import { logUnexpectedError, prismaRetryReason } from "@/lib/errors";
 
 describe("phone normalisation", () => {
   test("accepts the common Bangladesh forms", () => {
@@ -129,6 +131,43 @@ describe("money and errors", () => {
   test("detects Prisma unique-constraint violations", () => {
     assert.equal(isUniqueViolation({ code: "P2002" }), true);
     assert.equal(isUniqueViolation(new Error("boom")), false);
+  });
+  test("extracts only safe Prisma error details", () => {
+    assert.equal(prismaRetryReason({ code: "P2022", meta: { column: "secret", password: "no" } }), "P2022");
+    assert.equal(prismaRetryReason(new Error("private")), "internal");
+  });
+  test("logs safe metadata without error messages or unapproved metadata", () => {
+    const original = console.error;
+    let logged = "";
+    console.error = (...parts: unknown[]) => { logged = parts.join(" "); };
+    try {
+      logUnexpectedError("[test] failed", { operation: "student.create", requestId: "req-123" }, {
+        name: "PrismaClientKnownRequestError",
+        code: "P2003",
+        message: "private student or guardian data",
+        meta: { modelName: "StudentProfile", field_name: "guardianId", password: "private" },
+      });
+    } finally {
+      console.error = original;
+    }
+    assert.match(logged, /"code":"P2003"/);
+    assert.match(logged, /"modelName":"StudentProfile"/);
+    assert.match(logged, /"requestId":"req-123"/);
+    assert.doesNotMatch(logged, /private|password/);
+  });
+});
+
+describe("background job validation and retry timing", () => {
+  test("accepts only a well-formed SMS recipient payload", () => {
+    assert.equal(smsRecipientIdFromPayload({ smsRecipientId: "recipient-1" }), "recipient-1");
+    assert.equal(smsRecipientIdFromPayload({ smsRecipientId: "" }), null);
+    assert.equal(smsRecipientIdFromPayload({ smsRecipientId: 1 }), null);
+    assert.equal(smsRecipientIdFromPayload(null), null);
+  });
+  test("retry delay grows exponentially and is capped", () => {
+    assert.equal(retryDelayMs(1), 30_000);
+    assert.equal(retryDelayMs(2), 60_000);
+    assert.equal(retryDelayMs(100), 30 * 60_000);
   });
 });
 
