@@ -14,6 +14,7 @@ import { requireRole } from "@/lib/auth/guards";
 import { teacherOverview } from "@/services/dashboards";
 import { Badge, EmptyState } from "@/components/ui";
 import { formatDay, TZ } from "@/lib/dates";
+import { shortMessagesLeft } from "@/lib/sms/balance";
 import { formatTaka, num } from "@/lib/money";
 
 export const metadata = { title: "Overview" };
@@ -50,10 +51,11 @@ export default async function TeacherOverview() {
 
   // Only things that need a decision today. Each links to where it is fixed.
   const attention: { tone: Tone; text: string; href: string; cta: string }[] = [];
-  if (o.allowance && o.allowance.overdrawn > 0) {
-    attention.push({ tone: "rose", text: `You've used more message credits than your limit. Messages are on hold until more are added.`, href: "/teacher/sms", cta: "See messages" });
-  } else if (o.allowance && o.allowance.remaining === 0) {
-    attention.push({ tone: "amber", text: "You're out of message credits, so parent notices are paused. Ask the owner to add more.", href: "/teacher/sms", cta: "See messages" });
+  const left = shortMessagesLeft(o.sms.credits);
+  if (o.sms.credits !== null && o.sms.credits <= 0 && o.sms.status === "ok") {
+    attention.push({ tone: "rose", text: "The message balance is empty, so parent texts cannot be sent. Top up at nishchit.tech.", href: "/teacher/sms", cta: "See balance" });
+  } else if (left !== null && left > 0 && left < 50) {
+    attention.push({ tone: "amber", text: `Only about ${left} short messages are left. Top up soon.`, href: "/teacher/sms", cta: "See balance" });
   }
   if (o.outstanding > 0) {
     attention.push({ tone: "amber", text: `${formatTaka(o.outstanding)} is still to collect from students.`, href: "/teacher/payments", cta: "Record payments" });
@@ -106,8 +108,8 @@ export default async function TeacherOverview() {
         <Kpi label="Still to collect" value={formatTaka(o.outstanding)} hint="Across all students" icon={<Wallet className="h-5 w-5" aria-hidden="true" />} tone={o.outstanding > 0 ? "amber" : "emerald"} />
         <Kpi
           label="Messages left"
-          value={o.allowance ? o.allowance.remaining.toLocaleString("en-US") : "0"}
-          hint={o.allowance ? "Message credits you have left" : "Not set up yet"}
+          value={shortMessagesLeft(o.sms.credits)?.toLocaleString("en-US") ?? "—"}
+          hint="Short messages left in the shared balance"
           icon={<MessageSquare className="h-5 w-5" aria-hidden="true" />}
           tone="sky"
         />

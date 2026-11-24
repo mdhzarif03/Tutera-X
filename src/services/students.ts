@@ -9,36 +9,42 @@ import { addHours } from "@/lib/dates";
 import { queueSms } from "@/lib/sms/service";
 import { render, templates } from "@/lib/sms/templates";
 import { optionalText, requireNumber, requireText } from "@/lib/validate";
+import { checkClassFields } from "@/lib/student-options";
 import { assertBatchOwned, assertStudentOfTeacher } from "./scope";
 import { balancesFor } from "./payments";
-import { settleRecipientCredits } from "@/lib/sms/allowance";
 import type { Prisma } from "@prisma/client";
 
 export const PAGE_SIZE = 25;
 
 export interface StudentInput {
   name: string;
-  phone: string | null;
   guardianName: string;
   guardianPhone: string;
   className: string;
-  institution: string;
   version: string;
+  studentGroup: string | null;
+  institution: string;
   monthlyFee: number;
   batchId: string | null;
 }
 
 export function parseStudentInput(raw: Record<string, string>): StudentInput {
-  const phoneRaw = optionalText(raw.phone, 20);
+  const classFields = (() => {
+    try {
+      return checkClassFields({ className: raw.className ?? "", version: raw.version ?? "", studentGroup: raw.studentGroup ?? "" });
+    } catch (err) {
+      throw new UserError(err instanceof Error ? err.message : "Check the class details.");
+    }
+  })();
   return {
     name: requireText(raw.name, "Student name", 120),
-    phone: phoneRaw ? normalizeBdPhone(phoneRaw) : null,
-    guardianName: requireText(raw.guardianName, "Guardian name", 120),
-    guardianPhone: normalizeBdPhone(requireText(raw.guardianPhone, "Guardian phone", 20)),
-    className: requireText(raw.className, "Class", 40),
-    institution: requireText(raw.institution, "Institution", 120),
-    version: requireText(raw.version, "Version", 40),
-    monthlyFee: requireNumber(raw.monthlyFee, "Monthly tuition", 0, 1_000_000),
+    guardianName: requireText(raw.guardianName, "Parent or guardian name", 120),
+    guardianPhone: normalizeBdPhone(requireText(raw.guardianPhone, "Parent or guardian phone", 20)),
+    className: classFields.className,
+    version: classFields.version,
+    studentGroup: classFields.studentGroup,
+    institution: requireText(raw.institution, "School or institute", 120),
+    monthlyFee: requireNumber(raw.monthlyFee, "Monthly fee", 0, 1_000_000),
     batchId: optionalText(raw.batchId, 64),
   };
 }
@@ -75,7 +81,7 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
   const studentId = randomUUID();
   const username = await nextUsername("S");
   const token = randomToken(32);
-  const body = render(templates.studentActivation, { name: input.name, username, link: activationLink(token) });
+  const body = render(templates.studentActivation, { student: input.name, username, link: activationLink(token) });
 
   try {
     await db.$transaction(
@@ -91,7 +97,6 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
             role: "STUDENT",
             username,
             name: input.name,
-            phoneE164: input.phone,
             status: "PENDING_ACTIVATION",
           },
         });
@@ -101,6 +106,7 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
             className: input.className,
             institution: input.institution,
             version: input.version,
+            studentGroup: input.studentGroup,
             monthlyFee: input.monthlyFee,
             guardianId: guardian.id,
           },
@@ -116,7 +122,7 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
           dedupeKey: `activation:${activation.id}`,
           teacherId,
           template: templates.studentActivation,
-          recipients: [{ studentId, phone: input.phone ?? input.guardianPhone, body }],
+          recipients: [{ studentId, phone: input.guardianPhone, body }],
         });
         await audit(tx, {
           actorId: teacherId,
@@ -195,9 +201,10 @@ export async function getStudentDetail(teacherId: string, studentId: string) {
         className: true,
         institution: true,
         version: true,
+        studentGroup: true,
         monthlyFee: true,
         archivedAt: true,
-        user: { select: { name: true, username: true, status: true, phoneE164: true } },
+        user: { select: { name: true, username: true, status: true } },
         guardian: {
           select: {
             name: true,
@@ -262,13 +269,14 @@ export async function updateStudent(teacherId: string, studentId: string, input:
         await tx.guardian.update({ where: { id: current.guardianId }, data: { name: input.guardianName } });
       }
 
-      await tx.user.update({ where: { id: studentId }, data: { name: input.name, phoneE164: input.phone } });
+      await tx.user.update({ where: { id: studentId }, data: { name: input.name } });
       await tx.studentProfile.update({
         where: { userId: studentId },
         data: {
           className: input.className,
           institution: input.institution,
           version: input.version,
+          studentGroup: input.studentGroup,
           monthlyFee: input.monthlyFee,
           guardianId,
         },
@@ -298,15 +306,15 @@ export async function resendActivation(teacherId: string, studentId: string): Pr
   await assertStudentOfTeacher(teacherId, studentId);
   const user = await db.user.findUniqueOrThrow({
     where: { id: studentId },
-    select: { status: true, name: true, username: true, phoneE164: true, studentProfile: { select: { guardian: { select: { phoneE164: true } } } } },
+    select: { status: true, name: true, username: true, studentProfile: { select: { guardian: { select: { phoneE164: true } } } } },
   });
   if (user.status !== "PENDING_ACTIVATION") throw new UserError("This student has already joined.");
   if (!user.username) throw new UserError("This account has no login ID.");
+  const phone = user.studentProfile?.guardian.phoneE164;
+  if (!phone) throw new UserError("There's no parent phone number saved for this student.");
 
   const token = randomToken(32);
-  const body = render(templates.studentActivation, { name: user.name, username: user.username, link: activationLink(token) });
-  const phone = user.phoneE164 ?? user.studentProfile?.guardian.phoneE164;
-  if (!phone) throw new UserError("There's no phone number saved for this student.");
+  const body = render(templates.studentActivation, { student: user.name, username: user.username, link: activationLink(token) });
 
   await db.$transaction(async (tx) => {
     await tx.studentActivation.updateMany({ where: { userId: studentId, usedAt: null }, data: { usedAt: new Date() } });
@@ -324,55 +332,11 @@ export async function resendActivation(teacherId: string, studentId: string): Pr
   });
 }
 
-export async function createParentLogin(teacherId: string, studentId: string): Promise<{ username: string }> {
-  await assertStudentOfTeacher(teacherId, studentId);
-  const s = await db.studentProfile.findUniqueOrThrow({
-    where: { userId: studentId },
-    select: { guardian: { select: { id: true, name: true, phoneE164: true, parentUser: { select: { userId: true } } } } },
-  });
-  if (s.guardian.parentUser) throw new UserError("This parent already has an account.");
-
-  const userId = randomUUID();
-  const username = await nextUsername("P");
-  const token = randomToken(32);
-  const body = render(templates.parentActivation, { name: s.guardian.name, username, link: activationLink(token) });
-
-  try {
-    await db.$transaction(async (tx) => {
-      await tx.user.create({
-        data: {
-          id: userId,
-          role: "PARENT",
-          username,
-          name: s.guardian.name,
-          phoneE164: s.guardian.phoneE164,
-          status: "PENDING_ACTIVATION",
-        },
-      });
-      await tx.parentProfile.create({ data: { userId, guardianId: s.guardian.id } });
-      const activation = await tx.studentActivation.create({
-        data: { userId, tokenHash: sha256(token), expiresAt: addHours(new Date(), 72) },
-      });
-      await queueSms(tx, {
-        purpose: "ACCOUNT_ACTIVATION",
-        dedupeKey: `activation:${activation.id}`,
-        teacherId,
-        template: templates.parentActivation,
-        recipients: [{ studentId, phone: s.guardian.phoneE164, body }],
-      });
-      await audit(tx, { actorId: teacherId, action: "parent.create", entityType: "parent", entityId: userId, changes: { studentId } });
-    });
-  } catch (err) {
-    if (isUniqueViolation(err)) throw new UserError("This parent's phone number is already in use.");
-    throw err;
-  }
-  return { username };
-}
 
 /**
  * Deletes a student when nothing depends on them. If they have attendance, fees, results, payments
  * or a parent login, they are archived instead, so no history is lost. A student shared with another
- * teacher is removed only from this teacher's classes. Queued messages release their allowance first.
+ * teacher is removed only from this teacher's classes.
  */
 export async function deleteStudent(teacherId: string, studentId: string): Promise<string> {
   await assertStudentOfTeacher(teacherId, studentId);
@@ -399,10 +363,6 @@ export async function deleteStudent(teacherId: string, studentId: string): Promi
   const permanent = otherTeachers === 0;
   await db.$transaction(async (tx) => {
     if (permanent) {
-      // Release any allowance still held by queued messages to this student, so it cannot leak.
-      const held = await tx.smsRecipient.findMany({ where: { studentId, reservedCredits: { gt: 0 } }, select: { id: true } });
-      for (const r of held) await settleRecipientCredits(tx, r.id, null);
-
       await tx.batchStudent.deleteMany({ where: { studentId } });
       await tx.teacherStudent.deleteMany({ where: { studentId } });
       await tx.smsDeliveryAttempt.deleteMany({ where: { smsRecipient: { studentId } } });

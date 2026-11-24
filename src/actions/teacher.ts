@@ -18,9 +18,7 @@ import * as comms from "@/services/comms";
 import * as teachers from "@/services/teachers";
 import { refreshSmsBalance } from "@/services/comms";
 import { providerMode } from "@/lib/sms/nishchit";
-import { adjustAllowance } from "@/lib/sms/allowance";
-import { parseCreditAmount } from "@/lib/sms/allowance-math";
-import { clearInviteRevealCookie, setInviteRevealCookie } from "@/lib/auth/one-time";
+import { clearInviteRevealCookie, clearResetRevealCookie, setInviteRevealCookie, setResetRevealCookie } from "@/lib/auth/one-time";
 
 async function teacher() {
   return requireRole("TEACHER");
@@ -69,14 +67,6 @@ export async function resendActivationAction(formData: FormData): Promise<void> 
   });
 }
 
-export async function createParentLoginAction(formData: FormData): Promise<void> {
-  const t = await teacher();
-  const studentId = requireId(str(formData, "studentId"), "Student");
-  return runAction(`/teacher/students/${studentId}`, async () => {
-    const r = await students.createParentLogin(t.id, studentId);
-    return { message: `Parent account created. Login ID: ${r.username}. Activation SMS queued.` };
-  });
-}
 
 export async function addAdjustmentAction(formData: FormData): Promise<void> {
   const t = await teacher();
@@ -174,11 +164,10 @@ export async function saveAttendanceAction(formData: FormData): Promise<void> {
     const removed = clearIds.length ? await attendance.clearAttendance(t.id, batchId, date, clearIds) : 0;
     const r = entries.length
       ? await attendance.saveAttendance(t.id, batchId, date, entries)
-      : { saved: 0, noticesQueued: 0, noticesSkipped: 0 };
+      : { saved: 0, noticesQueued: 0 };
     const notices = r.noticesQueued ? ` ${r.noticesQueued} absence text${r.noticesQueued === 1 ? "" : "s"} on the way.` : "";
-    const skipped = r.noticesSkipped ? ` ${r.noticesSkipped} notice${r.noticesSkipped === 1 ? " was" : "s were"} not sent: no credits left.` : "";
     const cleared = removed ? ` ${removed} mark${removed === 1 ? " was" : "s were"} removed.` : "";
-    return { message: `Attendance saved for ${r.saved} student${r.saved === 1 ? "" : "s"}.${notices}${skipped}${cleared}` };
+    return { message: `Attendance saved for ${r.saved} student${r.saved === 1 ? "" : "s"}.${notices}${cleared}` };
   });
 }
 
@@ -229,8 +218,7 @@ export async function publishResultsAction(formData: FormData): Promise<void> {
   const examId = requireId(str(formData, "examId"), "Exam");
   return runAction(`/teacher/exams/${examId}`, async () => {
     const r = await exams.publishResults(t.id, examId);
-    const skipped = r.noticesSkipped ? ` ${r.noticesSkipped} notice${r.noticesSkipped === 1 ? " was" : "s were"} not sent: no credits left.` : "";
-    return { message: `Published ${r.published} result${r.published === 1 ? "" : "s"}. ${r.noticesQueued} guardian notice${r.noticesQueued === 1 ? "" : "s"} queued.${skipped}` };
+    return { message: `Published ${r.published} result${r.published === 1 ? "" : "s"}. ${r.noticesQueued} guardian notice${r.noticesQueued === 1 ? "" : "s"} queued.` };
   });
 }
 
@@ -314,25 +302,7 @@ export async function dismissInviteLinkAction(): Promise<void> {
   redirect("/teacher/teachers");
 }
 
-export async function adjustAllowanceAction(formData: FormData): Promise<void> {
-  const t = await teacher();
-  const teacherId = requireId(str(formData, "teacherId"), "Teacher");
-  return runAction("/teacher/teachers", async () => {
-    let delta: number;
-    try {
-      delta = parseCreditAmount(str(formData, "delta"), "Change");
-    } catch (err) {
-      throw new UserError(err instanceof Error ? err.message : "Enter a whole number of credits.");
-    }
-    await adjustAllowance(t.id, teacherId, delta, optionalNote(str(formData, "note")));
-    return { message: `Credits ${delta > 0 ? "increased" : "reduced"} by ${Math.abs(delta)} credit${Math.abs(delta) === 1 ? "" : "s"}.` };
-  });
-}
 
-function optionalNote(value: string): string | null {
-  const v = value.trim();
-  return v ? v.slice(0, 200) : null;
-}
 
 export async function revokeInvitationAction(formData: FormData): Promise<void> {
   const t = await teacher();
@@ -380,4 +350,20 @@ export async function deleteStudentAction(formData: FormData): Promise<void> {
     const message = await students.deleteStudent(t.id, studentId);
     return { message, redirectTo: "/teacher/students" };
   });
+}
+
+export async function issueTeacherResetAction(formData: FormData): Promise<void> {
+  const t = await teacher();
+  const targetId = requireId(str(formData, "teacherId"), "Teacher");
+  return runAction("/teacher/teachers", async () => {
+    const token = await teachers.issueTeacherResetLink(t.id, targetId);
+    await setResetRevealCookie(token);
+    return { message: "Reset link created. Send it privately. It works once and expires in 24 hours." };
+  });
+}
+
+export async function dismissResetLinkAction(): Promise<void> {
+  await teacher();
+  await clearResetRevealCookie();
+  redirect("/teacher/teachers");
 }

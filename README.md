@@ -49,6 +49,7 @@ After any schema change, add a migration with `npx prisma migrate dev --name <ch
 Migrations in order:
 
 - `20261122180000_init`: the initial schema. Applied or not, it must not be edited, because Prisma checksums applied migrations. `scripts/generate-initial-migration.py` refuses to overwrite it.
+- `20261124090000_student_group`: adds the student group (Science, Commerce, Humanities) for Class 9 to 12. It only adds a column, so existing data is unchanged.
 - `20261123090000_sms_recipient_student_fk`: adds the foreign key from `SmsRecipient.studentId` to `StudentProfile.userId`, which the `SmsRecipient.student` relation needs. It changes no data. Before adding the constraint it checks for recipients that point at missing students and stops with a clear error if it finds any. Running `npx prisma migrate deploy` against an existing database applies only this new migration.
 
 ## SMS pricing
@@ -57,15 +58,15 @@ Before a bulk send or an exam announcement, the app asks Nishchit for a price wi
 
 If the provider is not configured, unreachable, or returns something that fails validation, the app uses its local segment rules instead. The quote records its `source` (`provider` or `local`) and the reason for any fallback. Quotes are fetched before the database transaction opens, so no network call runs while rows are locked. The **Check cost** button on the SMS page shows the estimate without sending.
 
-## SMS allowances and the shared balance
+## Message balance
 
-- The **shared Nishchit balance** is the platform's money, read from `GET /v1/balance` and cached for 15 minutes.
-- Each teacher has a **per-teacher allowance** in credits (one credit is one segment). The owner grants and reduces it on the Teachers page. Every change is recorded in the allowance ledger.
-- **Reservation.** Before a message is queued, its credits are reserved against the teacher's allowance in one conditional SQL update. Each recipient reserves the larger of its local estimate and the provider's quote, so an underestimate can't quietly under-reserve.
-- **Settlement.** When Nishchit accepts a message, the reservation is settled against the credits actually billed. The unused part is released.
-- **Discrepancy policy.** If Nishchit bills more than was reserved, the provider has already charged that amount, so the app records all of it as used, records the excess as an `OVERAGE` ledger entry, and marks the teacher **overdrawn**. An overdrawn allowance accepts no new reservations, so sends are refused until the owner adds credits. The overdrawn amount is shown on the overview and SMS pages. The app never refuses to record a charge the provider has already made, and it never hides one.
-- **Refund.** A message that fails after acceptance is refunded by Nishchit, and the app returns the consumed credits.
-- **Strict vs skip.** Manual sends and account activations are strict: they are refused with a clear message when the allowance is short. Automatic notices (absences, exam announcements, results) are skip-mode: attendance, exams and results always save, and notices beyond the allowance are recorded as skipped.
+- Messages are paid for from **one shared balance at Nishchit** (nishchit.tech). Every teacher uses the same balance. There are no per-teacher limits.
+- The Messages page shows the balance in credits, and how many short English messages it covers. One short English message uses one credit. Bangla and longer messages use more, and the composer shows the count before sending.
+- When the balance is known to be empty, sending is stopped with a clear message before anything is queued. Automatic texts (absences, exams, results) are still queued and sent once the balance is topped up.
+- The provider charges each accepted message and refunds failed ones, so the app keeps no separate money records.
+- Credits are topped up at nishchit.tech. The balance page's **Check now** button reads the latest figure.
+- Old quota columns and the allowance ledger remain in the database but are no longer used. A future migration can remove them once you are sure no one needs the history.
+
 
 ## Activation, password reset and invitation links
 
@@ -111,9 +112,9 @@ npm run test:integration  # PostgreSQL integration tests; needs TEST_DATABASE_UR
 npm run typecheck
 ```
 
-`npm test` covers phone rules, SMS segmentation, Dhaka time, webhook signatures, templates, validation, environment parsing, pricing (including fallback when the provider is unreachable), allowance arithmetic and the settlement policy, and invitation token format.
+`npm test` covers phone rules, SMS segmentation, Dhaka time, webhook signatures, templates, validation, environment parsing, pricing (including fallback when the provider is unreachable), the message balance, and invitation token format.
 
-`npm run test:integration` covers, against real PostgreSQL: 100 concurrent reservations against a 10-credit allowance, strict refusal with no leftover rows after a rolled-back transaction, skip-mode behaviour, idempotent settlement, overage recording and the resulting block, refunds after acceptance, owner-only allowance changes with the floor enforced, and exclusive job claims with stale-lock reclaim. Without `TEST_DATABASE_URL` it reports one skipped entry, not a pass.
+`npm run test:integration` covers, against real PostgreSQL: queueing one row and one job per recipient, idempotent queueing, exclusive job claims, and stale-lock reclaim. Without `TEST_DATABASE_URL` it reports one skipped entry, not a pass.
 
 ## Delivery and cost notes
 
@@ -141,3 +142,21 @@ npm run typecheck
 - End-to-end behaviour against the live Nishchit API. The pricing preview response is validated defensively, but its live shape is confirmed only from Nishchit's published documentation.
 
 Before deploying, run: `npm install`, `npx prisma generate`, `npx prisma validate`, `npm run db:verify` with a shadow database, `npx prisma migrate deploy`, `npm run typecheck`, `npm run build`, `npm test`, `npm run test:integration` with `TEST_DATABASE_URL`, and a manual browser pass through sign-in, activation, a send with **Check cost**, an attendance save with an absence notice, and a result publish.
+
+## Behaviour notes for owners and teachers
+
+- **Deleting a student** removes them and their SMS notice history only when nothing else is recorded for them (no attendance, fees, results, payments or parent login). Otherwise they are archived. Removing notice history is intentional: it applies only to students with no other records.
+- **Removing an absence mark** sends the parent a short correction text if they were told about the absence. Nothing is sent otherwise.
+- **Changing marks after results are shared** sends each affected parent a correction text. Shared results cannot be taken back.
+- **Password reset without a phone number:** the owner can create a reset link for a teacher on the Team page. The link works once and expires in 24 hours.
+- **Balance check:** pages never wait for the messaging provider. The last known balance is shown and refreshed in the background. An explicit refresh still waits for the result.
+- **JavaScript:** invitation, welcome and reset links read their secret in the browser, so JavaScript must be on. Pages show a note if it is off.
+
+## Students, parents and messages
+
+- **One profile per student.** A student record holds the student's name, class, medium, group (Class 9 to 12 only), school, monthly fee, and the parent or guardian's name and phone. Students and parents see the same information.
+- **Messages go to the parent or guardian's phone.** Welcome links, absence texts, exam notices and results all go there. Students have no phone number of their own in Tutera-X.
+- **Choices are fixed:** Class 6 to Class 12; medium is English Version, English Medium or Bangla Version; group is Science, Commerce or Humanities. The lists live in `src/lib/student-options.ts`.
+- **Existing data:** a student's old phone number is kept in the database but is no longer shown or used. Students whose medium was typed in before may need it picked again the next time their profile is saved.
+- **Parent accounts:** the separate parent sign-in is no longer created. A parent signs in with the student's login ID, the same as the student. Existing parent accounts still work.
+

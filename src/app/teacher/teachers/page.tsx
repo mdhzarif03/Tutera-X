@@ -1,38 +1,54 @@
 import { requireRole } from "@/lib/auth/guards";
 import {
-  adjustAllowanceAction,
   dismissInviteLinkAction,
+  dismissResetLinkAction,
   inviteTeacherAction,
+  issueTeacherResetAction,
   revokeInvitationAction,
   setTeacherActiveAction,
 } from "@/actions/teacher";
-import { inviteUrl, listInvitations, listTeachers } from "@/services/teachers";
-import { readInviteRevealCookie } from "@/lib/auth/one-time";
-import { remainingCredits } from "@/lib/sms/allowance-math";
+import { inviteUrl, listInvitations, listTeachers, resetUrl } from "@/services/teachers";
+import { readInviteRevealCookie, readResetRevealCookie } from "@/lib/auth/one-time";
 import { Badge, Card, EmptyState, Field, Flash, PageHeader } from "@/components/ui";
+import { ConfirmAction } from "@/components/confirm-action";
 import { formatDateTime } from "@/lib/dates";
 import { pick } from "@/lib/params";
 
-export const metadata = { title: "Teachers" };
+export const metadata = { title: "Team" };
 
 export default async function TeachersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const t = await requireRole("TEACHER");
   const sp = await searchParams;
   const viewerIsOwner = t.teacherRole === "OWNER";
-  const [teachers, invitations, revealToken] = await Promise.all([listTeachers(), listInvitations(), readInviteRevealCookie()]);
+  const [teachers, invitations, inviteToken, resetToken] = await Promise.all([
+    listTeachers(),
+    listInvitations(),
+    readInviteRevealCookie(),
+    readResetRevealCookie(),
+  ]);
 
   return (
     <>
-      <PageHeader title="Teachers" description="Invite a colleague with a link. The link works once and expires after three days." />
+      <PageHeader title="Team" description="Invite a colleague with a link. The link works once and expires after three days." />
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
 
-      {revealToken ? (
+      {inviteToken ? (
         <Card title="Send this link to your colleague" className="mb-6 border-teal-300">
-          <p className="mb-3 text-sm text-slate-600">
-            Send it privately. It works once and expires in three days.
-          </p>
-          <code className="block break-all rounded-md bg-slate-900 px-3 py-2 text-xs text-slate-100">{inviteUrl(revealToken)}</code>
+          <p className="mb-3 text-sm text-slate-600">Send it privately. It works once and expires in three days.</p>
+          <code className="block break-all rounded-md bg-slate-900 px-3 py-2 text-xs text-slate-100">{inviteUrl(inviteToken)}</code>
           <form action={dismissInviteLinkAction} className="mt-3">
+            <button className="btn btn-secondary btn-sm" type="submit">Done</button>
+          </form>
+        </Card>
+      ) : null}
+
+      {resetToken ? (
+        <Card title="Send this reset link to the teacher" className="mb-6 border-teal-300">
+          <p className="mb-3 text-sm text-slate-600">
+            It lets them choose a new password. It works once and expires in 24 hours. It is shown only until you press Done.
+          </p>
+          <code className="block break-all rounded-md bg-slate-900 px-3 py-2 text-xs text-slate-100">{resetUrl(resetToken)}</code>
+          <form action={dismissResetLinkAction} className="mt-3">
             <button className="btn btn-secondary btn-sm" type="submit">Done</button>
           </form>
         </Card>
@@ -42,7 +58,9 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
         <div className="space-y-6 lg:col-span-1">
           <Card title="Invite a teacher">
             <form action={inviteTeacherAction} className="grid gap-3">
-              <Field label="Email address" htmlFor="email"><input id="email" name="email" type="email" required maxLength={254} className="input" /></Field>
+              <Field label="Email address" htmlFor="email">
+                <input id="email" name="email" type="email" required maxLength={254} className="input" />
+              </Field>
               <button className="btn btn-primary" type="submit">Create invitation</button>
             </form>
           </Card>
@@ -61,7 +79,7 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
                     {i.invitedById === t.id ? (
                       <form action={revokeInvitationAction}>
                         <input type="hidden" name="invitationId" value={i.id} />
-                        <button className="btn btn-secondary btn-sm" type="submit">Revoke</button>
+                        <button className="btn btn-secondary btn-sm" type="submit">Cancel</button>
                       </form>
                     ) : null}
                   </li>
@@ -71,15 +89,11 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
           </Card>
         </div>
 
-        <Card title="Team" className="lg:col-span-2" description="Set how many message credits each teacher can use.">
+        <Card title="Team" className="lg:col-span-2" description="Everyone who can sign in to Tutera-X.">
           <ul className="divide-y divide-slate-100">
             {teachers.map((tc) => {
-              const profile = tc.teacherProfile;
-              const targetIsOwner = profile?.role === "OWNER";
+              const targetIsOwner = tc.teacherProfile?.role === "OWNER";
               const isSelf = tc.id === t.id;
-              const state = profile
-                ? { allowance: profile.smsAllowance, used: profile.smsCreditsUsed, reserved: profile.smsCreditsReserved }
-                : null;
               return (
                 <li key={tc.id} className="py-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -94,43 +108,39 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
                         <Badge tone={tc.status === "ACTIVE" ? "good" : "neutral"}>{tc.status === "ACTIVE" ? "active" : "access off"}</Badge>
                       </div>
                     </div>
-                    {state ? (
-                      <div className="text-right text-sm">
-                        <p className="font-semibold tabular-nums text-slate-900">{remainingCredits(state).toLocaleString("en-US")} left</p>
-                        <p className="text-xs text-slate-500">
-                          {state.allowance.toLocaleString("en-US")} allowed · {state.used.toLocaleString("en-US")} used · {state.reserved.toLocaleString("en-US")} waiting
-                        </p>
-                      </div>
-                    ) : null}
                   </div>
 
-                  {viewerIsOwner ? (
-                    <form action={adjustAllowanceAction} className="mt-3 flex flex-wrap items-end gap-2">
-                      <input type="hidden" name="teacherId" value={tc.id} />
-                      <div>
-                        <label htmlFor={`delta-${tc.id}`} className="label">Add or take away credits</label>
-                        <input id={`delta-${tc.id}`} name="delta" type="number" step={1} required placeholder="+500 or -100" className="input w-40" />
-                      </div>
-                      <div className="min-w-48 flex-1">
-                        <label htmlFor={`note-${tc.id}`} className="label">Note (optional)</label>
-                        <input id={`note-${tc.id}`} name="note" maxLength={200} className="input" />
-                      </div>
-                      <button className="btn btn-secondary btn-sm" type="submit">Save</button>
-                    </form>
-                  ) : null}
-
-                  {viewerIsOwner && !targetIsOwner && !isSelf ? (
-                    <form action={setTeacherActiveAction} className="mt-3">
-                      <input type="hidden" name="teacherId" value={tc.id} />
-                      <input type="hidden" name="active" value={tc.status === "ACTIVE" ? "0" : "1"} />
-                      <button className="btn btn-secondary btn-sm" type="submit">{tc.status === "ACTIVE" ? "Turn access off" : "Turn access on"}</button>
-                    </form>
+                  {viewerIsOwner && !isSelf ? (
+                    <div className="mt-3 flex flex-wrap items-start gap-2">
+                      <form action={issueTeacherResetAction}>
+                        <input type="hidden" name="teacherId" value={tc.id} />
+                        <button className="btn btn-secondary btn-sm" type="submit">Create a password reset link</button>
+                      </form>
+                      {!targetIsOwner && tc.status === "ACTIVE" ? (
+                        <ConfirmAction
+                          action={setTeacherActiveAction}
+                          hidden={{ teacherId: tc.id, active: "0" }}
+                          label="Turn access off"
+                          question={`Turn off ${tc.name}'s access? They are signed out and cannot sign in until you turn it back on.`}
+                          confirmLabel="Yes, turn off"
+                        />
+                      ) : null}
+                      {!targetIsOwner && tc.status !== "ACTIVE" ? (
+                        <form action={setTeacherActiveAction}>
+                          <input type="hidden" name="teacherId" value={tc.id} />
+                          <input type="hidden" name="active" value="1" />
+                          <button className="btn btn-secondary btn-sm" type="submit">Turn access on</button>
+                        </form>
+                      ) : null}
+                    </div>
                   ) : null}
                 </li>
               );
             })}
           </ul>
-          {!viewerIsOwner ? <p className="mt-4 text-xs text-slate-500">Only the owner can change credits or turn a teacher's access on or off.</p> : null}
+          {!viewerIsOwner ? (
+            <p className="mt-4 text-xs text-slate-500">Only the owner can send reset links or turn a teacher&apos;s access on or off.</p>
+          ) : null}
         </Card>
       </div>
     </>

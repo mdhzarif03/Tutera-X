@@ -83,3 +83,21 @@ export async function clearAccountTokenCookie(kind: AccountTokenKind): Promise<v
   const jar = await cookies();
   jar.delete({ name: c.name, path: c.path });
 }
+
+// Lets the owner see a freshly created reset link once. Path-scoped to the Team page.
+export const RESET_REVEAL_COOKIE = "tx_reset_reveal";
+
+export async function setResetRevealCookie(token: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(RESET_REVEAL_COOKIE, token, { httpOnly: true, secure: secure(), sameSite: "strict", path: "/teacher/teachers", maxAge: 5 * 60 });
+}
+
+export async function readResetRevealCookie(): Promise<string | null> {
+  const jar = await cookies();
+  return jar.get(RESET_REVEAL_COOKIE)?.value ?? null;
+}
+
+export async function clearResetRevealCookie(): Promise<void> {
+  const jar = await cookies();
+  jar.delete({ name: RESET_REVEAL_COOKIE, path: "/teacher/teachers" });
+}

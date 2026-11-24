@@ -130,3 +130,46 @@ describe("money and errors", () => {
     assert.equal(isUniqueViolation(new Error("boom")), false);
   });
 });
+
+describe("correction messages", () => {
+  test("absence correction and result correction render without leftover placeholders", () => {
+    const a = render(templates.absenceCorrection, { student: "Rafi", date: "23 Nov 2026", teacher: "Ms. Rahman" });
+    assert.equal(a, "Dear Guardian, please ignore the absence notice for Rafi on 23 Nov 2026. It was sent in error. - Ms. Rahman");
+    const r = render(templates.resultCorrection, { student: "Rafi", marks: 41, total: 50, exam: "Unit Test 3", teacher: "Ms. Rahman" });
+    assert.equal(r, "Dear Guardian, a correction: Rafi got 41 out of 50 in Unit Test 3. - Ms. Rahman");
+    assert.doesNotMatch(a + r, /\{\w+\}/);
+  });
+});
+
+describe("message balance", () => {
+  test("the balance is shown as whole short messages", async () => {
+    const { shortMessagesLeft } = await import("@/lib/sms/balance");
+    assert.equal(shortMessagesLeft(null), null);
+    assert.equal(shortMessagesLeft(0), 0);
+    assert.equal(shortMessagesLeft(12.9), 12);
+    assert.equal(shortMessagesLeft(-5), 0);
+  });
+});
+
+describe("student class, medium and group", () => {
+  const { checkClassFields, needsGroup, CLASS_OPTIONS, VERSION_OPTIONS } = require("@/lib/student-options");
+  test("the choices are exactly as agreed", () => {
+    assert.deepEqual([...CLASS_OPTIONS], ["Class 6", "Class 7", "Class 8", "Class 9", "Class 10", "Class 11", "Class 12"]);
+    assert.deepEqual([...VERSION_OPTIONS], ["English Version", "English Medium", "Bangla Version"]);
+  });
+  test("a group is needed only for Class 9 to 12", () => {
+    assert.equal(needsGroup("Class 8"), false);
+    assert.equal(needsGroup("Class 9"), true);
+    assert.equal(needsGroup("Class 12"), true);
+  });
+  test("a Class 9 to 12 student must have a group, and a Class 6 to 8 student gets none", () => {
+    assert.throws(() => checkClassFields({ className: "Class 10", version: "Bangla Version", studentGroup: "" }), /group/);
+    assert.deepEqual(checkClassFields({ className: "Class 10", version: "Bangla Version", studentGroup: "Science" }), { className: "Class 10", version: "Bangla Version", studentGroup: "Science" });
+    assert.deepEqual(checkClassFields({ className: "Class 7", version: "English Medium", studentGroup: "Science" }), { className: "Class 7", version: "English Medium", studentGroup: null });
+  });
+  test("only the listed classes and media are accepted", () => {
+    assert.throws(() => checkClassFields({ className: "Class 5", version: "English Medium", studentGroup: "" }), /class/);
+    assert.throws(() => checkClassFields({ className: "Class 6", version: "French", studentGroup: "" }), /medium/);
+  });
+});
+

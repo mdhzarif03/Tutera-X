@@ -17,7 +17,7 @@ export async function listTeachers() {
       email: true,
       status: true,
       lastLoginAt: true,
-      teacherProfile: { select: { role: true, smsAllowance: true, smsCreditsUsed: true, smsCreditsReserved: true } },
+      teacherProfile: { select: { role: true } },
     },
   });
 }
@@ -118,4 +118,27 @@ export async function setTeacherActive(actorId: string, targetId: string, active
     if (!active) await tx.session.updateMany({ where: { userId: targetId, revokedAt: null }, data: { revokedAt: new Date() } });
     await audit(tx, { actorId, action: active ? "teacher.activate" : "teacher.deactivate", entityType: "user", entityId: targetId });
   });
+}
+
+/** Owner only. Creates a one-time reset link for a teacher, for when no phone number is saved. Valid 24 hours. */
+export async function issueTeacherResetLink(actorId: string, targetId: string): Promise<string> {
+  const actor = await db.teacherProfile.findUnique({ where: { userId: actorId }, select: { role: true } });
+  if (actor?.role !== "OWNER") throw new UserError("Only the owner can send a password reset link.");
+  const target = await db.user.findFirst({ where: { id: targetId, role: "TEACHER", deletedAt: null }, select: { id: true } });
+  if (!target) throw new UserError("Teacher not found.");
+
+  const token = randomToken(32);
+  await db.$transaction(async (tx) => {
+    // Only the newest link works, so an older link cannot be used after a new one is issued.
+    await tx.passwordResetToken.updateMany({ where: { userId: targetId, usedAt: null }, data: { usedAt: new Date() } });
+    const reset = await tx.passwordResetToken.create({
+      data: { userId: targetId, tokenHash: sha256(token), expiresAt: addHours(new Date(), 24) },
+    });
+    await audit(tx, { actorId, action: "teacher.reset_link", entityType: "user", entityId: targetId, changes: { resetId: reset.id } });
+  });
+  return token;
+}
+
+export function resetUrl(token: string): string {
+  return `${getEnv().APP_URL.replace(/\/$/, "")}/reset#${token}`;
 }

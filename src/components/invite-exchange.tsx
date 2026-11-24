@@ -39,13 +39,36 @@ export function InviteExchange() {
       });
   }, []);
 
-  if (state === "checking") return <p className="text-sm text-slate-600" role="status">Checking your link…</p>;
+  const noscript = (
+    <noscript>
+      <p className="mb-3 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+        This link needs JavaScript. Turn it on in your browser settings, then open the link again.
+      </p>
+    </noscript>
+  );
+
+  if (state === "checking") {
+    return (
+      <>
+        {noscript}
+        <p className="text-sm text-slate-600" role="status">Checking your link…</p>
+      </>
+    );
+  }
   if (state === "missing") {
-    return <p className="text-sm text-slate-600">Open the link you were sent to join.</p>;
+    return (
+      <>
+        {noscript}
+        <p className="text-sm text-slate-600">Open the link you were sent to join.</p>
+      </>
+    );
   }
   return (
-    <p role="alert" className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-900 ring-1 ring-inset ring-rose-200">
-      {message}
-    </p>
+    <>
+      {noscript}
+      <p role="alert" className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-900 ring-1 ring-inset ring-rose-200">
+        {message}
+      </p>
+    </>
   );
 }

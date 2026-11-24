@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/guards";
 import { publishResultsAction, saveMarksAction } from "@/actions/teacher";
 import { getExamSheet } from "@/services/exams";
 import { Badge, Card, EmptyState, Flash, PageHeader } from "@/components/ui";
+import { ConfirmAction } from "@/components/confirm-action";
 import { formatDay } from "@/lib/dates";
 import { pick } from "@/lib/params";
 import { UserError } from "@/lib/errors";
@@ -94,14 +95,24 @@ export default async function ExamSheetPage({
           </form>
 
           {!published ? (
-            <form action={publishResultsAction} className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-teal-200 bg-teal-50/60 p-4">
-              <input type="hidden" name="examId" value={exam.id} />
-              <div className="flex-1 text-sm text-teal-950">
-                <p className="font-semibold">Share results</p>
-                <p className="text-teal-900/80">Students can see their marks. Each parent gets one text.</p>
+            <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-teal-200 bg-teal-50/60 p-4">
+                <div className="flex-1 text-sm text-teal-950">
+                  <p className="font-semibold">Share results</p>
+                  <p className="text-teal-900/80">Students can see their marks. Each parent gets one text. Shared results can&apos;t be taken back.</p>
+                </div>
+                {publishable ? (
+                  <ConfirmAction
+                    action={publishResultsAction}
+                    hidden={{ examId: exam.id }}
+                    label={`Share ${rows.length} result${rows.length === 1 ? "" : "s"}`}
+                    question={`Share ${rows.length} result${rows.length === 1 ? "" : "s"} now? Each parent gets one text. You cannot take shared results back.`}
+                    confirmLabel="Yes, share now"
+                    tone="primary"
+                  />
+                ) : (
+                  <p className="text-sm text-amber-800">Enter every student&apos;s marks before sharing.</p>
+                )}
               </div>
-              <button className="btn btn-primary" type="submit" disabled={!publishable}>Share {rows.length} result{rows.length === 1 ? "" : "s"}</button>
-            </form>
           ) : null}
         </>
       )}

@@ -3,9 +3,8 @@ import { UserError } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import { dateOnly, dhakaToday, formatDay, isTime } from "@/lib/dates";
 import { queueSms } from "@/lib/sms/service";
-import { quoteSend } from "@/lib/sms/pricing";
 import { render, templates } from "@/lib/sms/templates";
-import { contactsFor, studentFirstPhone } from "@/lib/sms/recipients";
+import { contactsFor } from "@/lib/sms/recipients";
 import { num } from "@/lib/money";
 import { assertBatchOwned, assertExamOwned } from "./scope";
 import { requireNumber, requireText, optionalText, requireId } from "@/lib/validate";
@@ -71,13 +70,6 @@ export async function createExam(teacherId: string, input: ExamInput): Promise<s
   const teacher = await db.user.findUniqueOrThrow({ where: { id: teacherId }, select: { name: true } });
   const dateLabel = formatDay(day);
 
-  // Priced before the transaction opens. The sample uses the longest name, so the quote is conservative.
-  let longest = "";
-  for (const c of contacts.values()) if (c.studentName.length > longest.length) longest = c.studentName;
-  const quote = await quoteSend(
-    render(templates.examAnnouncement, { student: longest, exam: input.name, date: dateLabel, time: input.examTime, teacher: teacher.name }),
-    studentIds.length,
-  );
 
   return db.$transaction(
     async (tx) => {
@@ -101,7 +93,7 @@ export async function createExam(teacherId: string, input: ExamInput): Promise<s
         return [
           {
             studentId: sid,
-            phone: studentFirstPhone(c),
+            phone: c.guardianPhone,
             body: render(templates.examAnnouncement, {
               student: c.studentName,
               exam: input.name,
@@ -118,8 +110,6 @@ export async function createExam(teacherId: string, input: ExamInput): Promise<s
         teacherId,
         template: templates.examAnnouncement,
         recipients,
-        allowance: "skip",
-        minCredits: quote.creditsPerMessage,
       });
       await audit(tx, { actorId: teacherId, action: "exam.create", entityType: "exam", entityId: exam.id, changes: { batches: input.batchIds.length } });
       return exam.id;
@@ -207,6 +197,10 @@ export async function saveMarks(
     })
     .filter((e): e is { studentId: string; marks: number; absent: boolean } => e !== null);
 
+  // Loaded before the transaction opens, so no lookups run while rows are locked.
+  const contacts = await contactsFor(cleaned.map((e) => e.studentId));
+  const teacher = await db.user.findUniqueOrThrow({ where: { id: teacherId }, select: { name: true } });
+
   return db.$transaction(
     async (tx) => {
       let changed = 0;
@@ -238,6 +232,20 @@ export async function saveMarks(
               reason: "Correction after publication",
             },
           });
+          // The parent already has the old result, so they are sent the correction.
+          const c = contacts.get(e.studentId);
+          if (c) {
+            const body = e.absent
+              ? render(templates.resultAbsent, { student: c.studentName, exam: exam.name, teacher: teacher.name })
+              : render(templates.resultCorrection, { student: c.studentName, marks: e.marks, total: totalMarks, exam: exam.name, teacher: teacher.name });
+            await queueSms(tx, {
+              purpose: "RESULT_PUBLISHED",
+              dedupeKey: `result-correction:${existing.id}:${existing.version + 1}`,
+              teacherId,
+              template: templates.resultCorrection,
+              recipients: [{ studentId: e.studentId, phone: c.guardianPhone, body }],
+            });
+          }
         }
         await tx.examResult.update({
           where: { id: existing.id },
@@ -259,7 +267,7 @@ export async function saveMarks(
  * Publishes results only when every student on the sheet has a mark or an absence entry.
  * Each newly published result queues one notice to the guardian, exactly once.
  */
-export async function publishResults(teacherId: string, examId: string): Promise<{ published: number; noticesQueued: number; noticesSkipped: number }> {
+export async function publishResults(teacherId: string, examId: string): Promise<{ published: number; noticesQueued: number }> {
   const exam = await assertExamOwned(teacherId, examId);
   if (exam.status === "CANCELLED") throw new UserError("A cancelled exam cannot be published.");
 
@@ -281,7 +289,6 @@ export async function publishResults(teacherId: string, examId: string): Promise
     async (tx) => {
       const now = new Date();
       let noticesQueued = 0;
-      let noticesSkipped = 0;
       for (const r of toPublish) {
         await tx.examResult.update({ where: { id: r.id }, data: { publishedAt: now } });
         const c = contacts.get(r.studentId);
@@ -301,14 +308,12 @@ export async function publishResults(teacherId: string, examId: string): Promise
           teacherId,
           template: templates.resultPublished,
           recipients: [{ studentId: r.studentId, phone: c.guardianPhone, body }],
-          allowance: "skip",
         });
         noticesQueued += res.queued;
-        noticesSkipped += res.skipped;
       }
       await tx.exam.update({ where: { id: examId }, data: { status: "RESULTS_PUBLISHED", resultsPublishedAt: now } });
       await audit(tx, { actorId: teacherId, action: "results.publish", entityType: "exam", entityId: examId, changes: { published: toPublish.length } });
-      return { published: toPublish.length, noticesQueued, noticesSkipped };
+      return { published: toPublish.length, noticesQueued };
     },
     { timeout: 60_000 },
   );

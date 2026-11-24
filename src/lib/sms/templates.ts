@@ -3,12 +3,13 @@
 
 export const templates = {
   absence: "Dear Guardian, your child {student} was marked absent from {batch} on {date}. - {teacher}",
-  examAnnouncement: "Dear {student}, your {exam} examination is scheduled for {date} at {time}. - {teacher}",
+  examAnnouncement: "Dear Guardian, {student} has {exam} on {date} at {time}. - {teacher}",
   resultPublished: "Dear Guardian, {student} achieved {marks} out of {total} in {exam}. - {teacher}",
   resultAbsent: "Dear Guardian, {student} was marked absent for {exam}. - {teacher}",
-  studentActivation: "Dear {name}, your Tutera-X username is {username}. Set your password within 72 hours: {link}",
-  parentActivation: "Dear {name}, your Tutera-X parent login is {username}. Set your password within 72 hours: {link}",
+  studentActivation: "Dear Guardian, {student} can now use Tutera-X. Login ID: {username}. Set a password within 72 hours: {link}",
   passwordReset: "Tutera-X: reset your password within 1 hour: {link}",
+  absenceCorrection: "Dear Guardian, please ignore the absence notice for {student} on {date}. It was sent in error. - {teacher}",
+  resultCorrection: "Dear Guardian, a correction: {student} got {marks} out of {total} in {exam}. - {teacher}",
 } as const;
 
 export type TemplateName = keyof typeof templates;

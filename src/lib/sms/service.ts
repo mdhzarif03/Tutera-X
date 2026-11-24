@@ -1,23 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma, SmsPurpose } from "@prisma/client";
 import { db } from "@/lib/db";
-import { UserError } from "@/lib/errors";
 import { addMinutes, nextDhakaMidnight } from "@/lib/dates";
 import { analyzeSms } from "./segments";
 import { PLATFORM_PREFIX } from "./templates";
 import { NishchitError, liveSendingAllowed, sendMessage } from "./nishchit";
-import { readAllowance, refundProviderCredits, reserveCredits, settleRecipientCredits } from "./allowance";
+
+// Messages are paid for from the shared Nishchit balance. There are no per-teacher limits.
+// The provider charges each accepted message and refunds failed ones.
 
 export const MAX_ATTEMPTS = 6;
 const SENSITIVE: ReadonlySet<SmsPurpose> = new Set(["ACCOUNT_ACTIVATION", "PASSWORD_RESET"]);
 const REDACTED = "[sensitive content, redacted after sending]";
-
-/**
- * strict: the whole send is refused if the teacher's allowance cannot cover it (used by manual sends).
- * skip:   recipients beyond the allowance are recorded as SKIPPED, and the rest still go out
- *         (used by automatic notices, which must never block attendance, exams or results).
- */
-export type AllowanceMode = "strict" | "skip";
 
 export interface QueueRecipient {
   studentId: string | null;
@@ -29,18 +23,17 @@ export interface QueueResult {
   created: boolean;
   messageId: string | null;
   queued: number;
-  skipped: number;
 }
 
-/** Estimated billable credits for one message: segments with the platform prefix, as Nishchit counts them. */
+/** Estimated credits for one message, counting the platform prefix as Nishchit does. */
 export function estimateCredits(body: string): number {
   return analyzeSms(`[${PLATFORM_PREFIX}] ${body}`).segments;
 }
 
 /**
- * Creates a logical message, one row per recipient, reserves allowance per recipient, and queues
- * one persistent job for each recipient that will be sent. Call inside the caller's transaction, so
- * the notice, its reservation and the business change commit or roll back together.
+ * Creates a logical message with one row per recipient, and one persistent job per recipient.
+ * Call inside the caller's transaction, so the message and the business change commit together.
+ * Returns created=false when the dedupe key already exists, which makes the call idempotent.
  */
 export async function queueSms(
   tx: Prisma.TransactionClient,
@@ -50,33 +43,15 @@ export async function queueSms(
     teacherId: string | null;
     template: string;
     recipients: QueueRecipient[];
-    allowance?: AllowanceMode;
-    /** Per-recipient floor from a provider quote. Reservations never fall below it. */
-    minCredits?: number;
   },
 ): Promise<QueueResult> {
-  if (input.recipients.length === 0) return { created: false, messageId: null, queued: 0, skipped: 0 };
+  if (input.recipients.length === 0) return { created: false, messageId: null, queued: 0 };
 
   const existing = await tx.smsMessage.findUnique({ where: { dedupeKey: input.dedupeKey }, select: { id: true } });
-  if (existing) return { created: false, messageId: existing.id, queued: 0, skipped: 0 };
-
-  const mode: AllowanceMode = input.allowance ?? "strict";
-  const floor = Math.max(0, Math.trunc(input.minCredits ?? 0));
-  const credits = input.recipients.map((r) => Math.max(estimateCredits(r.body), floor));
-  const needed = credits.reduce((a, b) => a + b, 0);
-
-  if (input.teacherId && mode === "strict" && needed > 0) {
-    const state = await readAllowance(tx, input.teacherId);
-    if (state.remaining < needed) {
-      throw new UserError(
-        `Not enough message credits. You have ${state.remaining} left and this message needs about ${needed}. Ask the owner to add more.`,
-      );
-    }
-  }
+  if (existing) return { created: false, messageId: existing.id, queued: 0 };
 
   const messageId = randomUUID();
-  const first = input.recipients[0];
-  const sample = analyzeSms(first?.body ?? "");
+  const sample = analyzeSms(input.recipients[0]?.body ?? "");
   await tx.smsMessage.create({
     data: {
       id: messageId,
@@ -90,53 +65,20 @@ export async function queueSms(
     },
   });
 
-  const rows: Prisma.SmsRecipientCreateManyInput[] = [];
-  const jobRecipientIds: string[] = [];
-  let skipped = 0;
-
-  for (let i = 0; i < input.recipients.length; i++) {
-    const r = input.recipients[i];
-    if (!r) continue;
-    const id = randomUUID();
-    const need = credits[i] ?? 0;
-    let reserved = 0;
-    let status: "QUEUED" | "SKIPPED" = "QUEUED";
-    let skipReason: string | undefined;
-
-    if (input.teacherId && need > 0) {
-      if (await reserveCredits(tx, input.teacherId, need)) {
-        reserved = need;
-      } else if (mode === "strict") {
-        // Unreachable in practice: the pre-check above ran in the same transaction. Kept as a guard.
-        throw new UserError("Not enough SMS credits for this send.");
-      } else {
-        status = "SKIPPED";
-        skipReason = "allowance_exhausted";
-        skipped++;
-      }
-    }
-
-    rows.push({
-      id,
-      smsMessageId: messageId,
-      studentId: r.studentId,
-      phoneE164: r.phone,
-      body: r.body,
-      idempotencyKey: randomUUID(),
-      status,
-      skipReason,
-      reservedCredits: reserved,
-    });
-    if (status === "QUEUED") jobRecipientIds.push(id);
-  }
-
+  const rows: Prisma.SmsRecipientCreateManyInput[] = input.recipients.map((r) => ({
+    id: randomUUID(),
+    smsMessageId: messageId,
+    studentId: r.studentId,
+    phoneE164: r.phone,
+    body: r.body,
+    idempotencyKey: randomUUID(),
+    status: "QUEUED",
+  }));
   await tx.smsRecipient.createMany({ data: rows });
-  if (jobRecipientIds.length > 0) {
-    await tx.notificationJob.createMany({
-      data: jobRecipientIds.map((id) => ({ kind: "send_sms_recipient", payload: { smsRecipientId: id }, dedupeKey: `sms:${id}` })),
-    });
-  }
-  return { created: true, messageId, queued: jobRecipientIds.length, skipped };
+  await tx.notificationJob.createMany({
+    data: rows.map((r) => ({ kind: "send_sms_recipient", payload: { smsRecipientId: r.id }, dedupeKey: `sms:${r.id}` })),
+  });
+  return { created: true, messageId, queued: rows.length };
 }
 
 export type DeliveryOutcome =
@@ -155,12 +97,8 @@ function mapDelivery(d: string | undefined): "UNKNOWN" | "DELIVERED" | "UNDELIVE
   return "UNKNOWN";
 }
 
-/** Terminal update: the status change and the allowance release commit together. */
 async function finalize(recipientId: string, data: Prisma.SmsRecipientUpdateInput): Promise<void> {
-  await db.$transaction(async (tx) => {
-    await tx.smsRecipient.update({ where: { id: recipientId }, data });
-    await settleRecipientCredits(tx, recipientId, null);
-  });
+  await db.smsRecipient.update({ where: { id: recipientId }, data });
 }
 
 async function requeue(recipientId: string, e: NishchitError): Promise<void> {
@@ -207,22 +145,18 @@ export async function deliverRecipient(recipientId: string, attempt: number): Pr
 
     const sent = m.status === "sent";
     const now = new Date();
-    await db.$transaction(async (tx) => {
-      await tx.smsRecipient.update({
-        where: { id: r.id },
-        data: {
-          status: sent ? "SENT" : "ACCEPTED",
-          nishchitMessageId: m.id,
-          segments: m.segments,
-          credits: m.credits,
-          deliveryStatus: mapDelivery(m.delivery_status),
-          acceptedAt: now,
-          sentAt: sent ? now : null,
-          ...(SENSITIVE.has(r.smsMessage.purpose) ? { body: REDACTED } : {}),
-        },
-      });
-      // Settles the reservation against what was actually billed.
-      await settleRecipientCredits(tx, r.id, m.credits);
+    await db.smsRecipient.update({
+      where: { id: r.id },
+      data: {
+        status: sent ? "SENT" : "ACCEPTED",
+        nishchitMessageId: m.id,
+        segments: m.segments,
+        credits: m.credits,
+        deliveryStatus: mapDelivery(m.delivery_status),
+        acceptedAt: now,
+        sentAt: sent ? now : null,
+        ...(SENSITIVE.has(r.smsMessage.purpose) ? { body: REDACTED } : {}),
+      },
     });
     await db.smsDeliveryAttempt.create({
       data: { smsRecipientId: r.id, attemptNumber: attempt, httpStatus: 201, retryable: false },
@@ -245,6 +179,7 @@ export async function deliverRecipient(recipientId: string, attempt: number): Pr
 
     switch (e.code) {
       case "daily_quota_exceeded":
+        // This is the provider's own daily limit on the account, not a per-teacher limit.
         await requeue(r.id, e);
         return { kind: "retry", at: nextDhakaMidnight(), reason: e.code };
 
@@ -290,7 +225,7 @@ const RANK: Record<string, number> = { QUEUED: 0, SUBMITTING: 1, ACCEPTED: 2, SE
 
 /**
  * Applies a signed Nishchit event. Status only moves forward, so a late or duplicate event cannot
- * undo a newer state. A failure reported after acceptance refunds the credits that were charged.
+ * undo a newer state. Failed messages are refunded by the provider, so nothing is adjusted here.
  */
 export async function applyWebhookEvent(event: WebhookEvent): Promise<"applied" | "unknown_message" | "ignored"> {
   const r = await db.smsRecipient.findUnique({
@@ -302,15 +237,12 @@ export async function applyWebhookEvent(event: WebhookEvent): Promise<"applied" 
   const now = new Date();
 
   if (event.type === "message.failed") {
-    const code = event.data.error?.code ?? "failed";
-    await db.$transaction(async (tx) => {
-      // Only a message we accepted has charged credits to refund. The conditional update makes this run once.
-      const claimed = await tx.smsRecipient.updateMany({
-        where: { id: r.id, status: "ACCEPTED" },
-        data: { status: "FAILED", failedAt: now, lastErrorCode: code },
+    if (r.status === "ACCEPTED" || r.status === "SENT") {
+      await db.smsRecipient.update({
+        where: { id: r.id },
+        data: { status: "FAILED", failedAt: now, lastErrorCode: event.data.error?.code ?? "failed" },
       });
-      if (claimed.count === 1) await refundProviderCredits(tx, r.id);
-    });
+    }
     return "applied";
   }
 

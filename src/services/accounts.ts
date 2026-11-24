@@ -101,9 +101,11 @@ export async function requestPasswordReset(identifier: string): Promise<void> {
   }
   const user = await db.user.findFirst({
     where: { ...where, status: "ACTIVE", deletedAt: null },
-    select: { id: true, phoneE164: true, role: true },
+    select: { id: true, phoneE164: true, role: true, studentProfile: { select: { guardian: { select: { phoneE164: true } } } } },
   });
-  if (!user?.phoneE164) return;
+  // Students have no phone of their own, so a student's reset goes to the parent's phone.
+  const phone = user?.phoneE164 ?? user?.studentProfile?.guardian.phoneE164;
+  if (!user || !phone) return;
 
   const token = randomToken(32);
   const link = `${getEnv().APP_URL.replace(/\/$/, "")}/reset#${token}`;
@@ -118,7 +120,7 @@ export async function requestPasswordReset(identifier: string): Promise<void> {
       dedupeKey: `reset:${reset.id}`,
       teacherId: null,
       template: templates.passwordReset,
-      recipients: [{ studentId: null, phone: user.phoneE164 as string, body }],
+      recipients: [{ studentId: null, phone, body }],
     });
     await audit(tx, { actorId: user.id, action: "account.reset_requested", entityType: "user", entityId: user.id });
   });

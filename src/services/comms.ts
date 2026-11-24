@@ -3,10 +3,10 @@ import { db } from "@/lib/db";
 import { UserError } from "@/lib/errors";
 import { audit } from "@/lib/audit";
 import { queueSms } from "@/lib/sms/service";
-import { contactsFor, studentFirstPhone, type Contact } from "@/lib/sms/recipients";
+import { contactsFor, type Contact } from "@/lib/sms/recipients";
 import { analyzeSms } from "@/lib/sms/segments";
 import { PLATFORM_PREFIX, render } from "@/lib/sms/templates";
-import { quoteSend, type SendQuote } from "@/lib/sms/pricing";
+import { quoteSend } from "@/lib/sms/pricing";
 import { getBalance, providerMode, NishchitError } from "@/lib/sms/nishchit";
 import { assertBatchOwned, assertStudentOfTeacher } from "./scope";
 import { requireId } from "@/lib/validate";
@@ -57,7 +57,7 @@ function personalise(text: string, contacts: Map<string, Contact>, studentIds: s
     const c = contacts.get(sid);
     if (!c) return [];
     const personal = render(text.replace(/\{name\}/g, "{student}"), { student: c.studentName });
-    return [{ studentId: sid, phone: studentFirstPhone(c), body: `${personal} - ${teacherName}` }];
+    return [{ studentId: sid, phone: c.guardianPhone, body: `${personal} - ${teacherName}` }];
   });
 }
 
@@ -79,7 +79,7 @@ export async function sendMessage(
   teacherId: string,
   target: Target,
   rawBody: string,
-): Promise<{ recipients: number; skippedNoPhone: number; quote: SendQuote }> {
+): Promise<{ recipients: number; skippedNoPhone: number }> {
   const text = rawBody.trim();
   if (!text) throw new UserError("Write a message before sending.");
   if (text.length > MAX_BODY) throw new UserError(`Messages must be ${MAX_BODY} characters or fewer.`);
@@ -90,12 +90,15 @@ export async function sendMessage(
     throw new UserError(`You can message up to ${MAX_RECIPIENTS_PER_SEND} people at once. Split the audience and send again.`);
   }
 
+  // One shared balance for everyone. If it is already known to be empty, say so before queueing.
+  const snap = await db.smsBalanceSnapshot.findUnique({ where: { id: "singleton" }, select: { credits: true, apiStatus: true } });
+  if (snap && snap.apiStatus === "ok" && snap.credits <= 0) {
+    throw new UserError("The message balance is empty, so messages cannot be sent. Top up at nishchit.tech first.");
+  }
+
   const contacts = await contactsFor(studentIds);
   const teacher = await db.user.findUniqueOrThrow({ where: { id: teacherId }, select: { name: true } });
   const recipients = personalise(text, contacts, studentIds, teacher.name);
-
-  // Priced before the transaction opens, so no network call runs while rows are locked.
-  const quote = await quoteSend(sampleBody(text, contacts, teacher.name), recipients.length);
 
   const purpose = target.kind === "student" ? "INDIVIDUAL_MESSAGE" : "BULK_MESSAGE";
   await db.$transaction(
@@ -106,25 +109,18 @@ export async function sendMessage(
         teacherId,
         template: text,
         recipients,
-        allowance: "strict",
-        minCredits: quote.creditsPerMessage,
       });
       await audit(tx, {
         actorId: teacherId,
         action: "sms.send",
         entityType: "sms_message",
         entityId: result.messageId,
-        changes: {
-          target: target.kind,
-          queued: result.queued,
-          quoteSource: quote.source,
-          quotedCreditsPerMessage: quote.creditsPerMessage,
-        },
+        changes: { target: target.kind, queued: result.queued },
       });
     },
     { timeout: 30_000 },
   );
-  return { recipients: recipients.length, skippedNoPhone: studentIds.length - recipients.length, quote };
+  return { recipients: recipients.length, skippedNoPhone: studentIds.length - recipients.length };
 }
 
 export async function listSmsHistory(teacherId: string, take = 40) {
@@ -165,10 +161,14 @@ export async function getSmsBalance(opts: { force?: boolean } = {}) {
   if (mode === "unconfigured") {
     return { credits: snap?.credits ?? null, currency: snap?.currency ?? "BDT", asOf: snap?.nishchitAsOf ?? null, fetchedAt: snap?.fetchedAt ?? null, status: "not_configured" as const, mode };
   }
-  if (!opts.force && !stale && snap) {
+  // An explicit refresh waits for the provider, so the user sees the result.
+  if (opts.force) return refreshSmsBalance(mode);
+  // Pages never wait on the provider. Return the last known value at once, and refresh in the background.
+  if (stale) void refreshSmsBalance(mode).catch(() => undefined);
+  if (snap) {
     return { credits: snap.credits, currency: snap.currency, asOf: snap.nishchitAsOf, fetchedAt: snap.fetchedAt, status: snap.apiStatus, mode };
   }
-  return refreshSmsBalance(mode);
+  return { credits: null, currency: "BDT", asOf: null, fetchedAt: null, status: "unchecked" as const, mode };
 }
 
 export async function refreshSmsBalance(mode = providerMode()) {

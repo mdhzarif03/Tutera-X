@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import { deliverRecipient } from "@/lib/sms/service";
-import { settleRecipientCredits } from "@/lib/sms/allowance";
 
 /**
  * Persistent job runner. Safe with any number of application instances:
@@ -71,12 +70,9 @@ async function processJob(
       where: { id: job.id },
       data: { status: "FAILED_PERMANENT", lockedUntil: null, lastError: reason },
     });
-    await db.$transaction(async (tx) => {
-      await tx.smsRecipient.updateMany({
-        where: { id: smsRecipientId, status: { in: ["QUEUED", "SUBMITTING"] } },
-        data: { status: "FAILED", failedAt: new Date(), lastErrorCode: reason },
-      });
-      await settleRecipientCredits(tx, smsRecipientId, null);
+    await db.smsRecipient.updateMany({
+      where: { id: smsRecipientId, status: { in: ["QUEUED", "SUBMITTING"] } },
+      data: { status: "FAILED", failedAt: new Date(), lastErrorCode: reason },
     });
   }
 }

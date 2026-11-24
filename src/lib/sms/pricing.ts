@@ -73,7 +73,7 @@ export function localQuote(body: string, recipients: number, reason?: string): S
  * Fallback policy: if the provider is not configured, unreachable, or answers with something we
  * cannot validate, the local rules are used and the quote's `source` says so. A local quote can be
  * slightly wrong, which is why per-recipient reservations also take the larger of the two figures
- * (see queueSms) and any remaining difference is handled by the settlement policy in allowance.ts.
+ * (see queueSms).
  */
 export async function quoteSend(body: string, recipients: number): Promise<SendQuote> {
   if (recipients <= 0) return localQuote(body, 0);

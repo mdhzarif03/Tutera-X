@@ -11,6 +11,7 @@ import {
 } from "@/actions/teacher";
 import { getBatch } from "@/services/batches";
 import { Badge, Card, EmptyState, Field, Flash, PageHeader } from "@/components/ui";
+import { ConfirmAction } from "@/components/confirm-action";
 import { pick } from "@/lib/params";
 import { UserError } from "@/lib/errors";
 
@@ -68,11 +69,13 @@ export default async function BatchPage({
                         <td><Link href={`/teacher/students/${m.studentId}`} className="font-medium text-slate-900 hover:underline">{m.student.user.name}</Link><p className="text-xs text-slate-500">{m.student.user.username}</p></td>
                         <td>{m.student.guardian.name}</td>
                         <td className="text-right">
-                          <form action={removeFromBatchAction}>
-                            <input type="hidden" name="batchId" value={batch.id} />
-                            <input type="hidden" name="studentId" value={m.studentId} />
-                            <button className="btn btn-secondary btn-sm" type="submit">Remove</button>
-                          </form>
+                          <ConfirmAction
+                            action={removeFromBatchAction}
+                            hidden={{ batchId: batch.id, studentId: m.studentId }}
+                            label="Remove"
+                            question={`Remove ${m.student.user.name} from this batch? Their past attendance and results stay.`}
+                            confirmLabel="Yes, remove"
+                          />
                         </td>
                       </tr>
                     ))}

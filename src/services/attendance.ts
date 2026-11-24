@@ -50,7 +50,7 @@ export async function saveAttendance(
   batchId: string,
   date: string,
   entries: { studentId: string; status: AttendanceStatus }[],
-): Promise<{ saved: number; noticesQueued: number; noticesSkipped: number }> {
+): Promise<{ saved: number; noticesQueued: number }> {
   const batch = await assertBatchOwned(teacherId, batchId);
   const day = dateOnly(date);
   if (dayKey(day) > dhakaToday()) throw new UserError("Attendance cannot be recorded for a future date.");
@@ -72,7 +72,6 @@ export async function saveAttendance(
     async (tx) => {
       let saved = 0;
       let noticesQueued = 0;
-      let noticesSkipped = 0;
       for (const entry of valid) {
         const key = { batchId_studentId_date: { batchId, studentId: entry.studentId, date: day } };
         const existing = await tx.attendance.findUnique({ where: key });
@@ -106,17 +105,14 @@ export async function saveAttendance(
               date: dateLabel,
               teacher: teacher.name,
             });
-            // Automatic notices never block attendance: over-allowance notices are recorded as skipped.
             const result = await queueSms(tx, {
               purpose: "ABSENCE_NOTICE",
               dedupeKey: `absence:${record.id}`,
               teacherId,
               template: templates.absence,
               recipients: [{ studentId: entry.studentId, phone: c.guardianPhone, body }],
-              allowance: "skip",
             });
             noticesQueued += result.queued;
-            noticesSkipped += result.skipped;
           }
         }
       }
@@ -127,7 +123,7 @@ export async function saveAttendance(
         entityId: batchId,
         changes: { date, count: saved },
       });
-      return { saved, noticesQueued, noticesSkipped };
+      return { saved, noticesQueued };
     },
     { timeout: 30_000 },
   );
@@ -168,11 +164,29 @@ export async function attendanceSummary(studentId: string, batchFilter?: { teach
 export async function clearAttendance(teacherId: string, batchId: string, date: string, studentIds: string[]): Promise<number> {
   await assertBatchOwned(teacherId, batchId);
   const day = dateOnly(date);
+  const contacts = await contactsFor(studentIds);
+  const teacher = await db.user.findUniqueOrThrow({ where: { id: teacherId }, select: { name: true } });
+  const dateLabel = formatDay(day);
   return db.$transaction(async (tx) => {
     let removed = 0;
     for (const studentId of studentIds) {
       const rec = await tx.attendance.findUnique({ where: { batchId_studentId_date: { batchId, studentId, date: day } } });
       if (!rec) continue;
+      // If the parent was already told this student was absent, tell them it was a mistake.
+      if (rec.status === "ABSENT") {
+        const notice = await tx.smsMessage.findUnique({ where: { dedupeKey: `absence:${rec.id}` }, select: { id: true } });
+        const c = contacts.get(studentId);
+        if (notice && c) {
+          const body = render(templates.absenceCorrection, { student: c.studentName, date: dateLabel, teacher: teacher.name });
+          await queueSms(tx, {
+            purpose: "ABSENCE_NOTICE",
+            dedupeKey: `absence-correction:${rec.id}`,
+            teacherId,
+            template: templates.absenceCorrection,
+            recipients: [{ studentId, phone: c.guardianPhone, body }],
+          });
+        }
+      }
       await tx.attendanceChangeLog.deleteMany({ where: { attendanceId: rec.id } });
       await tx.attendance.delete({ where: { id: rec.id } });
       removed++;

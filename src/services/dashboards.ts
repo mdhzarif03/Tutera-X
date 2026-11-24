@@ -5,12 +5,11 @@ import { num } from "@/lib/money";
 import { balancesFor } from "./payments";
 import { attendanceSummary } from "./attendance";
 import { getSmsBalance, listSmsHistory } from "./comms";
-import { allowanceSummary } from "@/lib/sms/allowance";
 
 export async function teacherOverview(teacherId: string) {
   const today = dateOnly(dhakaToday());
   const in14 = addDays(today, 14);
-  const [activeStudents, activeBatches, todayAttendance, upcomingExams, recentPayments, recentMessages, links, sms, allowance] = await Promise.all([
+  const [activeStudents, activeBatches, todayAttendance, upcomingExams, recentPayments, recentMessages, links, sms] = await Promise.all([
     db.teacherStudent.count({ where: { teacherId, student: { archivedAt: null } } }),
     db.batch.count({ where: { teacherId, archivedAt: null } }),
     db.attendance.groupBy({
@@ -36,7 +35,6 @@ export async function teacherOverview(teacherId: string) {
       select: { studentId: true },
     }),
     getSmsBalance(),
-    allowanceSummary(teacherId),
   ]);
 
   const balances = await balancesFor(links.map((l) => l.studentId));
@@ -44,7 +42,7 @@ export async function teacherOverview(teacherId: string) {
   const counts: Record<string, number> = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 };
   for (const row of todayAttendance) counts[row.status] = row._count._all;
 
-  return { activeStudents, activeBatches, todayCounts: counts, upcomingExams, recentPayments, recentMessages, outstanding, sms, allowance };
+  return { activeStudents, activeBatches, todayCounts: counts, upcomingExams, recentPayments, recentMessages, outstanding, sms };
 }
 
 /** One student's dashboard. Used by the student themselves and by the linked parent (read-only). */
@@ -56,8 +54,9 @@ export async function studentDashboard(studentId: string) {
       className: true,
       institution: true,
       version: true,
+      studentGroup: true,
       monthlyFee: true,
-      user: { select: { name: true, username: true, phoneE164: true } },
+      user: { select: { name: true, username: true } },
       guardian: { select: { name: true, phoneE164: true } },
     },
   });

@@ -222,6 +222,7 @@ model StudentProfile {
   className       String
   institution     String
   version         String    // Bangla / English medium etc., as the spec calls it
+  studentGroup     String?   // Science, Commerce or Humanities. Only for Class 9 to 12.
   monthlyFee      Decimal   @db.Decimal(12, 2)
   guardianId      String
   guardian        Guardian  @relation(fields: [guardianId], references: [id], onDelete: Restrict)
