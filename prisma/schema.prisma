@@ -107,7 +107,7 @@ model User {
   id                 String        @id @default(cuid())
   role               Role
   email              String?       @unique
-  // Initials plus a globally unique sequential number, shared by student and parent accounts (for example RA-1001).
+  // Name initials plus a globally unique random number, shared by student and parent accounts.
   username           String?       @unique
   // Normalised E.164 (+8801XXXXXXXXX). Used for login and SMS.
   phoneE164          String?       @unique

@@ -9,7 +9,7 @@ import { addHours } from "@/lib/dates";
 import { queueSms } from "@/lib/sms/service";
 import { render, templates } from "@/lib/sms/templates";
 import { optionalText, requireNumber, requireText } from "@/lib/validate";
-import { nextUsername } from "@/lib/usernames";
+import { randomUsernameNumber, usernameCandidate, usernameInitials } from "@/lib/usernames";
 import { checkClassFields } from "@/lib/student-options";
 import { assertBatchOwned, assertStudentOfTeacher } from "./scope";
 import { balancesFor } from "./payments";
@@ -70,20 +70,23 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
 
   const studentId = randomUUID();
   const token = randomToken(32);
+  const initials = usernameInitials(input.name);
 
-  for (let attempt = 0; attempt < 5; attempt++) {
-    let candidate: string | null = null;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const number = randomUsernameNumber();
+    const username = usernameCandidate(initials, number);
 
     try {
-      const username = await db.$transaction(
+      const created = await db.$transaction(
         async (tx) => {
-          const generatedUsername = await nextUsername(tx, input.name);
-          candidate = generatedUsername;
-          const body = render(templates.studentActivation, {
-            student: input.name,
-            username: generatedUsername,
-            link: activationLink(token),
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(${BigInt(number)})`;
+          const usedNumber = await tx.user.findFirst({
+            where: { username: { endsWith: `-${number}` } },
+            select: { id: true },
           });
+          if (usedNumber) return false;
+
+          const body = render(templates.studentActivation, { student: input.name, username, link: activationLink(token) });
           const guardian = await tx.guardian.upsert({
             where: { phoneE164: input.guardianPhone },
             update: {},
@@ -93,7 +96,7 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
             data: {
               id: studentId,
               role: "STUDENT",
-              username: generatedUsername,
+              username,
               name: input.name,
               status: "PENDING_ACTIVATION",
             },
@@ -129,21 +132,18 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
             entityId: studentId,
             changes: { className: input.className, batchId: input.batchId },
           });
-          return generatedUsername;
+          return true;
         },
         { timeout: 20_000 },
       );
-      return { studentId, username };
+      if (created) return { studentId, username };
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
-      const usernameTaken = candidate
-        ? await db.user.findUnique({ where: { username: candidate }, select: { id: true } })
-        : null;
-      if (usernameTaken && attempt < 4) continue;
+      const usernameTaken = await db.user.findUnique({ where: { username }, select: { id: true } });
       if (!usernameTaken) throw new UserError("This phone number is already in use.");
     }
   }
-  throw new UserError("Could not allocate a username. Please try again.");
+  throw new UserError("Could not allocate a unique login ID. Please try again.");
 }
 
 export async function listStudents(
