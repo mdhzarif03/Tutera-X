@@ -15,7 +15,7 @@ export default async function ParentHome({ searchParams }: { searchParams: Promi
   if (children.length === 0) {
     return (
       <>
-        <PageHeader title={`Welcome, ${guardian.name}`} />
+        <PageHeader title="Parent account" description={`Contact number: ${guardian.phoneE164}`} />
         <EmptyState title="No linked children yet" body="Your child's teacher will connect your account. Then you'll see their attendance, results and fees here." />
       </>
     );

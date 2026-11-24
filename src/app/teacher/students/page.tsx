@@ -28,7 +28,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
     <>
       <PageHeader
         title={archived ? "Archived students" : "Students"}
-        description="Find someone by name, login ID or parent. Archived students keep their records."
+        description="Find someone by name, login ID or guardian phone. Archived students keep their records."
         actions={
           <Link href="/teacher/students/new" className="btn btn-primary">
             <UserPlus className="h-4 w-4" aria-hidden="true" />
@@ -42,7 +42,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
         <form className="flex flex-1 flex-wrap gap-2" role="search">
           <div className="relative min-w-64 flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-            <input type="search" name="q" defaultValue={q} placeholder="Search by name, login ID or parent" className="input pl-10" aria-label="Search students" />
+            <input type="search" name="q" defaultValue={q} placeholder="Search by name, login ID or guardian phone" className="input pl-10" aria-label="Search students" />
           </div>
           {archived ? <input type="hidden" name="archived" value="1" /> : null}
           <button className="btn btn-secondary" type="submit">
@@ -80,7 +80,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
                   <th>Student</th>
                   <th>Class</th>
                   <th>Batches</th>
-                  <th>Parent</th>
+                  <th>Guardian phone</th>
                   <th>Status</th>
                   <th className="text-right">Monthly fee</th>
                   <th className="text-right">
@@ -125,7 +125,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
                           </div>
                         )}
                       </td>
-                      <td className="text-slate-700">{s.guardian.name}</td>
+                      <td className="text-slate-700">{s.guardian.phoneE164}</td>
                       <td>
                         <Badge tone={st.tone}>{st.label}</Badge>
                       </td>

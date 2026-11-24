@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { UserError, isUniqueViolation } from "@/lib/errors";
 import { normalizeBdPhone } from "@/lib/phone";
-import { randomDigits, randomToken, sha256 } from "@/lib/crypto";
+import { randomToken, sha256 } from "@/lib/crypto";
 import { audit } from "@/lib/audit";
 import { getEnv } from "@/lib/env";
 import { addHours } from "@/lib/dates";
 import { queueSms } from "@/lib/sms/service";
 import { render, templates } from "@/lib/sms/templates";
 import { optionalText, requireNumber, requireText } from "@/lib/validate";
+import { usernameBase, usernameCandidate } from "@/lib/usernames";
 import { checkClassFields } from "@/lib/student-options";
 import { assertBatchOwned, assertStudentOfTeacher } from "./scope";
 import { balancesFor } from "./payments";
@@ -18,7 +19,6 @@ export const PAGE_SIZE = 25;
 
 export interface StudentInput {
   name: string;
-  guardianName: string;
   guardianPhone: string;
   className: string;
   version: string;
@@ -38,7 +38,6 @@ export function parseStudentInput(raw: Record<string, string>): StudentInput {
   })();
   return {
     name: requireText(raw.name, "Student name", 120),
-    guardianName: requireText(raw.guardianName, "Parent or guardian name", 120),
     guardianPhone: normalizeBdPhone(requireText(raw.guardianPhone, "Parent or guardian phone", 20)),
     className: classFields.className,
     version: classFields.version,
@@ -49,13 +48,14 @@ export function parseStudentInput(raw: Record<string, string>): StudentInput {
   };
 }
 
-async function nextUsername(prefix: "S" | "P"): Promise<string> {
-  for (let i = 0; i < 10; i++) {
-    const candidate = `${prefix}${randomDigits(6)}`;
+async function nextUsername(name: string): Promise<string> {
+  const base = usernameBase(name);
+  for (let sequence = 1; sequence <= 10_000; sequence++) {
+    const candidate = usernameCandidate(base, sequence);
     const taken = await db.user.findUnique({ where: { username: candidate }, select: { id: true } });
     if (!taken) return candidate;
   }
-  throw new UserError("Could not allocate a username. Please try again.");
+  throw new UserError("Could not allocate a username for this student. Please try again.");
 }
 
 function activationLink(token: string): string {
@@ -79,66 +79,72 @@ export async function createStudent(teacherId: string, input: StudentInput): Pro
   if (input.batchId) await assertBatchOwned(teacherId, input.batchId);
 
   const studentId = randomUUID();
-  const username = await nextUsername("S");
   const token = randomToken(32);
-  const body = render(templates.studentActivation, { student: input.name, username, link: activationLink(token) });
 
-  try {
-    await db.$transaction(
-      async (tx) => {
-        const guardian = await tx.guardian.upsert({
-          where: { phoneE164: input.guardianPhone },
-          update: {},
-          create: { phoneE164: input.guardianPhone, name: input.guardianName },
-        });
-        await tx.user.create({
-          data: {
-            id: studentId,
-            role: "STUDENT",
-            username,
-            name: input.name,
-            status: "PENDING_ACTIVATION",
-          },
-        });
-        await tx.studentProfile.create({
-          data: {
-            userId: studentId,
-            className: input.className,
-            institution: input.institution,
-            version: input.version,
-            studentGroup: input.studentGroup,
-            monthlyFee: input.monthlyFee,
-            guardianId: guardian.id,
-          },
-        });
-        await tx.teacherStudent.create({ data: { teacherId, studentId } });
-        if (input.batchId) await tx.batchStudent.create({ data: { batchId: input.batchId, studentId } });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const username = await nextUsername(input.name);
+    const body = render(templates.studentActivation, { student: input.name, username, link: activationLink(token) });
 
-        const activation = await tx.studentActivation.create({
-          data: { userId: studentId, tokenHash: sha256(token), expiresAt: addHours(new Date(), 72) },
-        });
-        await queueSms(tx, {
-          purpose: "ACCOUNT_ACTIVATION",
-          dedupeKey: `activation:${activation.id}`,
-          teacherId,
-          template: templates.studentActivation,
-          recipients: [{ studentId, phone: input.guardianPhone, body }],
-        });
-        await audit(tx, {
-          actorId: teacherId,
-          action: "student.create",
-          entityType: "student",
-          entityId: studentId,
-          changes: { className: input.className, batchId: input.batchId },
-        });
-      },
-      { timeout: 20_000 },
-    );
-  } catch (err) {
-    if (isUniqueViolation(err)) throw new UserError("This phone number is already in use.");
-    throw err;
+    try {
+      await db.$transaction(
+        async (tx) => {
+          const guardian = await tx.guardian.upsert({
+            where: { phoneE164: input.guardianPhone },
+            update: {},
+            create: { phoneE164: input.guardianPhone, name: "Guardian" },
+          });
+          await tx.user.create({
+            data: {
+              id: studentId,
+              role: "STUDENT",
+              username,
+              name: input.name,
+              status: "PENDING_ACTIVATION",
+            },
+          });
+          await tx.studentProfile.create({
+            data: {
+              userId: studentId,
+              className: input.className,
+              institution: input.institution,
+              version: input.version,
+              studentGroup: input.studentGroup,
+              monthlyFee: input.monthlyFee,
+              guardianId: guardian.id,
+            },
+          });
+          await tx.teacherStudent.create({ data: { teacherId, studentId } });
+          if (input.batchId) await tx.batchStudent.create({ data: { batchId: input.batchId, studentId } });
+
+          const activation = await tx.studentActivation.create({
+            data: { userId: studentId, tokenHash: sha256(token), expiresAt: addHours(new Date(), 72) },
+          });
+          await queueSms(tx, {
+            purpose: "ACCOUNT_ACTIVATION",
+            dedupeKey: `activation:${activation.id}`,
+            teacherId,
+            template: templates.studentActivation,
+            recipients: [{ studentId, phone: input.guardianPhone, body }],
+          });
+          await audit(tx, {
+            actorId: teacherId,
+            action: "student.create",
+            entityType: "student",
+            entityId: studentId,
+            changes: { className: input.className, batchId: input.batchId },
+          });
+        },
+        { timeout: 20_000 },
+      );
+      return { studentId, username };
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      const usernameTaken = await db.user.findUnique({ where: { username }, select: { id: true } });
+      if (usernameTaken && attempt < 4) continue;
+      if (!usernameTaken) throw new UserError("This phone number is already in use.");
+    }
   }
-  return { studentId, username };
+  throw new UserError("Could not allocate a username. Please try again.");
 }
 
 export async function listStudents(
@@ -155,7 +161,7 @@ export async function listStudents(
             OR: [
               { user: { name: { contains: q, mode: "insensitive" } } },
               { user: { username: { contains: q.toUpperCase() } } },
-              { guardian: { name: { contains: q, mode: "insensitive" } } },
+              { guardian: { phoneE164: { contains: q } } },
             ],
           }
         : {}),
@@ -176,7 +182,7 @@ export async function listStudents(
             version: true,
             monthlyFee: true,
             user: { select: { name: true, username: true, status: true } },
-            guardian: { select: { name: true, phoneE164: true } },
+            guardian: { select: { phoneE164: true } },
             batchMemberships: {
               where: { leftAt: null },
               select: { batch: { select: { name: true } } },
@@ -207,7 +213,6 @@ export async function getStudentDetail(teacherId: string, studentId: string) {
         user: { select: { name: true, username: true, status: true } },
         guardian: {
           select: {
-            name: true,
             phoneE164: true,
             parentUser: { select: { user: { select: { username: true, status: true } } } },
           },
@@ -262,11 +267,9 @@ export async function updateStudent(teacherId: string, studentId: string, input:
         const g = await tx.guardian.upsert({
           where: { phoneE164: input.guardianPhone },
           update: {},
-          create: { phoneE164: input.guardianPhone, name: input.guardianName },
+          create: { phoneE164: input.guardianPhone, name: "Guardian" },
         });
         guardianId = g.id;
-      } else {
-        await tx.guardian.update({ where: { id: current.guardianId }, data: { name: input.guardianName } });
       }
 
       await tx.user.update({ where: { id: studentId }, data: { name: input.name } });

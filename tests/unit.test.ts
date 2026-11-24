@@ -12,6 +12,7 @@ import { requireNumber, requireText } from "@/lib/validate";
 import { assertPasswordPolicy } from "@/lib/auth/policy";
 import { UserError, isUniqueViolation } from "@/lib/errors";
 import { round2, num } from "@/lib/money";
+import { usernameBase, usernameCandidate } from "@/lib/usernames";
 
 describe("phone normalisation", () => {
   test("accepts the common Bangladesh forms", () => {
@@ -128,6 +129,19 @@ describe("money and errors", () => {
   test("detects Prisma unique-constraint violations", () => {
     assert.equal(isUniqueViolation({ code: "P2002" }), true);
     assert.equal(isUniqueViolation(new Error("boom")), false);
+  });
+});
+
+describe("memorable usernames", () => {
+  test("normalizes names and uses a safe fallback when no Latin letters are available", () => {
+    assert.equal(usernameBase("Rahim Uddin"), "RAHIMUDDIN");
+    assert.equal(usernameBase("Éva"), "EVA");
+    assert.equal(usernameBase("রহিম"), "STUDENT");
+  });
+  test("adds a numeric suffix to distinguish repeated names", () => {
+    const base = usernameBase("Rahim");
+    assert.equal(usernameCandidate(base, 1), "RAHIM");
+    assert.equal(usernameCandidate(base, 2), "RAHIM2");
   });
 });
 

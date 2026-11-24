@@ -74,7 +74,7 @@ export async function getBatch(teacherId: string, batchId: string) {
         orderBy: { joinedAt: "asc" },
         select: {
           studentId: true,
-          student: { select: { user: { select: { name: true, username: true } }, guardian: { select: { name: true } } } },
+          student: { select: { user: { select: { name: true, username: true } }, guardian: { select: { phoneE164: true } } } },
         },
       },
       schedules: { orderBy: [{ weekday: "asc" }, { startMinute: "asc" }], select: { id: true, weekday: true, startMinute: true, endMinute: true, room: true } },

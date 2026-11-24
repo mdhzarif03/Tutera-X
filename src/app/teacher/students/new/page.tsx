@@ -25,10 +25,7 @@ export default async function NewStudentPage({ searchParams }: { searchParams: P
           <Field label="Student's name" htmlFor="name">
             <input id="name" name="name" required maxLength={120} className="input" />
           </Field>
-          <Field label="Parent or guardian's name" htmlFor="guardianName">
-            <input id="guardianName" name="guardianName" required maxLength={120} className="input" />
-          </Field>
-          <Field label="Parent or guardian's phone" htmlFor="guardianPhone" hint="Welcome links and messages go to this number.">
+          <Field label="Parent or guardian's phone" htmlFor="guardianPhone" hint="Required. The welcome link and messages go to this number.">
             <input id="guardianPhone" name="guardianPhone" required inputMode="tel" placeholder="01712345678" className="input" />
           </Field>
           <Field label="School or institute" htmlFor="institution">

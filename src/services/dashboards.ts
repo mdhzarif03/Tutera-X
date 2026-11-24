@@ -57,7 +57,7 @@ export async function studentDashboard(studentId: string) {
       studentGroup: true,
       monthlyFee: true,
       user: { select: { name: true, username: true } },
-      guardian: { select: { name: true, phoneE164: true } },
+      guardian: { select: { phoneE164: true } },
     },
   });
   if (!profile) throw new UserError("Student profile not found.");
@@ -125,7 +125,7 @@ export async function studentDashboard(studentId: string) {
 export async function parentChildren(parentUserId: string) {
   const parent = await db.parentProfile.findUnique({
     where: { userId: parentUserId },
-    select: { guardianId: true, guardian: { select: { name: true, phoneE164: true } } },
+    select: { guardianId: true, guardian: { select: { phoneE164: true } } },
   });
   if (!parent) throw new UserError("Parent profile not found.");
   const children = await db.studentProfile.findMany({

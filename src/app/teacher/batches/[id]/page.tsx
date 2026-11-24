@@ -62,12 +62,12 @@ export default async function BatchPage({
             ) : (
               <div className="-mx-4 overflow-x-auto sm:-mx-5">
                 <table className="tbl">
-                  <thead><tr><th>Student</th><th>Guardian</th><th className="text-right"> </th></tr></thead>
+                  <thead><tr><th>Student</th><th>Guardian phone</th><th className="text-right"> </th></tr></thead>
                   <tbody>
                     {batch.members.map((m) => (
                       <tr key={m.studentId}>
                         <td><Link href={`/teacher/students/${m.studentId}`} className="font-medium text-slate-900 hover:underline">{m.student.user.name}</Link><p className="text-xs text-slate-500">{m.student.user.username}</p></td>
-                        <td>{m.student.guardian.name}</td>
+                        <td>{m.student.guardian.phoneE164}</td>
                         <td className="text-right">
                           <ConfirmAction
                             action={removeFromBatchAction}

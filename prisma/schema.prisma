@@ -107,7 +107,7 @@ model User {
   id                 String        @id @default(cuid())
   role               Role
   email              String?       @unique
-  // Login identifier for student and parent accounts (for example S483920, P104553). Stored uppercase.
+  // Memorable login identifier shared by student and parent accounts (for example RAHIM, RAHIM2). Stored uppercase.
   username           String?       @unique
   // Normalised E.164 (+8801XXXXXXXXX). Used for login and SMS.
   phoneE164          String?       @unique

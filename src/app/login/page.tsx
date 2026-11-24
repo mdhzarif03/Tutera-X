@@ -16,7 +16,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <form action={loginAction} className="space-y-4">
         <div>
           <label htmlFor="identifier" className="label">Email, login ID or phone</label>
-          <input id="identifier" name="identifier" required autoComplete="username" className="input" placeholder="you@example.com or S483920" />
+          <input id="identifier" name="identifier" required autoComplete="username" className="input" placeholder="you@example.com or RAHIM" />
         </div>
         <div>
           <label htmlFor="password" className="label">Password</label>

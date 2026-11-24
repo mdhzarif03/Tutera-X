@@ -69,9 +69,6 @@ export default async function StudentPage({
               <Field label="Student's name" htmlFor="name">
                 <input id="name" name="name" required defaultValue={s.user.name} className="input" />
               </Field>
-              <Field label="Parent or guardian's name" htmlFor="guardianName">
-                <input id="guardianName" name="guardianName" required defaultValue={s.guardian.name} className="input" />
-              </Field>
               <Field label="Parent or guardian's phone" htmlFor="guardianPhone" hint="Welcome links and messages go to this number.">
                 <input id="guardianPhone" name="guardianPhone" required defaultValue={s.guardian.phoneE164} className="input" />
               </Field>

@@ -17,7 +17,6 @@ export default async function StudentProfile() {
     ...(p.studentGroup ? [["Group", p.studentGroup] as [string, string]] : []),
     ["Medium", p.version],
     ["School or institute", p.institution],
-    ["Parent or guardian", p.guardian.name],
     ["Parent or guardian's phone", p.guardian.phoneE164],
   ];
   return (
