@@ -68,9 +68,9 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
         <EmptyState title="Create a batch first" body="Attendance is taken per batch. Create one and add students." icon={<CalendarCheck2 className="h-6 w-6" aria-hidden="true" />} />
       ) : (
         <>
-          <div className="card mb-6 flex flex-wrap items-center gap-4 p-4 sm:p-5">
-            <form className="flex flex-1 flex-wrap items-end gap-3" role="search">
-              <div className="min-w-48 flex-1">
+          <div className="card mb-6 flex flex-wrap items-center gap-4 p-4 max-md:mb-3 max-md:p-3 sm:p-5">
+            <form className="flex flex-1 flex-wrap items-end gap-3 max-md:gap-2" role="search">
+              <div className="min-w-48 flex-1 max-md:min-w-full">
                 <label htmlFor="batch" className="label">Batch</label>
                 <SelectDropdown
                   id="batch"
@@ -79,7 +79,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
                   options={batches.map((b) => ({ value: b.id, label: b.name }))}
                 />
               </div>
-              <div>
+              <div className="max-md:flex-1">
                 <label htmlFor="date" className="label">Day</label>
                 <input id="date" name="date" type="date" defaultValue={date} max={today} className="input" />
               </div>
@@ -89,7 +89,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
             </form>
           </div>
 
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 max-md:mb-3 max-md:gap-2">
             <div className="flex items-center gap-2">
               <Link href={dayHref(prev)} className="btn btn-secondary btn-sm" aria-label="Previous day">
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -108,7 +108,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
               ) : null}
             </div>
             {roster ? (
-              <div className="flex flex-wrap items-center gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2 text-sm max-md:w-full max-md:gap-1.5 max-md:text-xs max-md:[&>span.text-slate-400]:hidden max-md:[&>span.rounded-full]:px-2 max-md:[&>span.rounded-full]:py-0 max-md:[&>span.rounded-full]:text-[11px]">
                 <span className="font-semibold text-slate-900">{formatDay(day)}</span>
                 <span className="text-slate-400">·</span>
                 <span className="text-slate-600">
@@ -138,9 +138,9 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
                       const current = r.status ?? "PRESENT";
                       const initials = r.name.split(" ").map((p) => p.charAt(0)).slice(0, 2).join("").toUpperCase();
                       return (
-                        <li key={r.studentId} className="flex flex-col gap-3 py-4 xl:flex-row xl:items-center xl:justify-between">
+                        <li key={r.studentId} className="flex flex-col gap-3 py-4 max-md:gap-2 max-md:py-3 xl:flex-row xl:items-center xl:justify-between">
                           <div className="flex min-w-0 items-center gap-3">
-                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-sm font-bold text-indigo-700 ring-1 ring-indigo-100" aria-hidden="true">
+                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-sm font-bold max-md:h-8 max-md:w-8 max-md:text-xs text-indigo-700 ring-1 ring-indigo-100" aria-hidden="true">
                               {initials}
                             </span>
                             <div className="min-w-0">
@@ -148,14 +148,21 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
                               <p className="text-xs text-slate-500">{r.status ? `Marked ${r.status.toLowerCase()}` : "Not yet marked"}</p>
                             </div>
                           </div>
-                          <fieldset className="inline-flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+                          <fieldset className="inline-flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1 max-md:grid max-md:w-full max-md:grid-cols-5 max-md:gap-0.5 max-md:p-0.5">
                             <legend className="sr-only">Status for {r.name}</legend>
                             {OPTIONS.map((o) => (
                               <label key={o.value} className="cursor-pointer">
                                 <input type="radio" name={`s_${r.studentId}`} value={o.value} defaultChecked={current === o.value} className="peer sr-only" />
-                                <span className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-none transition duration-200 hover:text-slate-900 peer-checked:shadow-md peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-indigo-500 ${o.on}`}>
-                                  <span className={`h-1.5 w-1.5 rounded-full ${o.dot}`} aria-hidden="true" />
-                                  {o.label}
+                                <span className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 max-md:w-full max-md:justify-center max-md:px-0.5 max-md:py-2 max-md:text-[11px] text-xs font-semibold text-slate-600 shadow-none transition duration-200 hover:text-slate-900 peer-checked:shadow-md peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-indigo-500 ${o.on}`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full max-md:hidden ${o.dot}`} aria-hidden="true" />
+                                  {o.value === "NONE" ? (
+                                    <>
+                                      <span className="md:hidden">Clear</span>
+                                      <span className="max-md:hidden">Not marked</span>
+                                    </>
+                                  ) : (
+                                    o.label
+                                  )}
                                 </span>
                               </label>
                             ))}
@@ -166,16 +173,16 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
                   </ul>
                 </Card>
 
-                <div className="sticky bottom-4 mt-5 flex flex-wrap items-center gap-3 rounded-2xl bg-white/90 p-3 shadow-lg shadow-indigo-900/10 ring-1 ring-slate-200 backdrop-blur-xl">
-                  <button className="btn btn-primary" type="submit">
+                <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] mt-5 flex md:bottom-4 flex-wrap items-center gap-3 max-md:gap-2 max-md:p-2 rounded-2xl bg-white/90 p-3 shadow-lg shadow-indigo-900/10 ring-1 ring-slate-200 backdrop-blur-xl">
+                  <button className="btn btn-primary max-md:flex-1" type="submit">
                     <Save className="h-4 w-4" aria-hidden="true" />
                     Save attendance
                   </button>
-                  <span className="text-xs text-slate-500">Students you don't change are left as they are.</span>
+                  <span className="text-xs text-slate-500 max-md:hidden">Students you don't change are left as they are.</span>
                 </div>
               </form>
 
-              <form action={markAllPresentAction} className="mt-3">
+              <form action={markAllPresentAction} className="mt-3 max-md:mt-2">
                 <input type="hidden" name="batchId" value={roster.batch.id} />
                 <input type="hidden" name="date" value={date} />
                 <button className="btn btn-secondary btn-sm" type="submit">

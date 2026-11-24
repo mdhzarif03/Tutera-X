@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { NavLinks, type NavItem } from "./nav-links";
 import { Logo } from "./logo";
 import { ProfileMenu } from "./profile-menu";
+import { BottomNav } from "./bottom-nav";
+import { TableLabels } from "./table-labels";
 
 // One calm frame for every role: the brand, the main navigation, and the account menu.
 // Settings and sign out live in the account menu, not in the navigation.
@@ -34,7 +36,7 @@ export function AppShell({
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 sm:px-6 md:h-16 lg:px-8">
           <Link href={home} className="shrink-0" aria-label="Tutera-X home">
             <Logo />
           </Link>
@@ -54,14 +56,24 @@ export function AppShell({
           </div>
         </div>
 
-        <div className="border-t border-slate-100 xl:hidden">
+        <div className="hidden border-t border-slate-100 md:block xl:hidden">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <NavLinks items={nav} variant="tabs" />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">{children}</main>
+      <main className="mx-auto w-full max-w-7xl px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-5 sm:px-6 md:py-8 lg:px-8 lg:py-10">{children}</main>
+
+      <BottomNav
+        items={nav}
+        name={userName}
+        roleLabel={roleLabel}
+        initials={initials}
+        settingsHref={settingsHref}
+        settingsLabel={settingsLabel}
+      />
+      <TableLabels />
     </div>
   );
 }

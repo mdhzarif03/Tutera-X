@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { loginAction } from "@/actions/auth";
 import { AuthCard } from "@/components/auth-card";
+import { PasswordInput } from "@/components/password-input";
 import { Flash } from "@/components/ui";
 import { pick } from "@/lib/params";
 import { ensureStartup } from "@/lib/startup";
@@ -20,7 +21,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
         <div>
           <label htmlFor="password" className="label">Password</label>
-          <input id="password" name="password" type="password" required autoComplete="current-password" className="input" />
+          <PasswordInput id="password" name="password" required autoComplete="current-password" />
         </div>
         <button type="submit" className="btn btn-primary w-full">Sign in</button>
       </form>

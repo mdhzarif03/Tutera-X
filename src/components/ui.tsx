@@ -28,7 +28,7 @@ export function PageHeader({
   eyebrow?: string;
 }) {
   return (
-    <header className="tx-enter mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <header className="tx-enter mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between md:mb-8">
       <div className="min-w-0">
         {eyebrow ? (
           <p className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600">
@@ -36,7 +36,7 @@ export function PageHeader({
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{title}</h1>
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 min-[400px]:text-2xl sm:text-3xl">{title}</h1>
         {description ? <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
@@ -64,7 +64,7 @@ export function Card({
   return (
     <section id={id} className={`card tx-enter ${className}`}>
       {title ? (
-        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-3.5 sm:px-5 sm:py-4">
           <div className="flex min-w-0 items-start gap-3">
             {icon ? <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-indigo-50 text-indigo-600">{icon}</span> : null}
             <div className="min-w-0">
@@ -75,7 +75,7 @@ export function Card({
           {actions}
         </header>
       ) : null}
-      <div className="p-5">{children}</div>
+      <div className="p-4 sm:p-5">{children}</div>
     </section>
   );
 }

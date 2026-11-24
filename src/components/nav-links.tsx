@@ -43,6 +43,11 @@ const ICONS: Record<string, LucideIcon> = {
   "/parent/settings": Settings,
 };
 
+/** Icon for a destination. Shared with the mobile bottom navigation. */
+export function navIcon(href: string): LucideIcon {
+  return ICONS[href] ?? Circle;
+}
+
 /** The most specific item matching the URL is active, so "/teacher" never lights up with "/teacher/students". */
 export function NavLinks({ items, variant }: { items: NavItem[]; variant: "top" | "tabs" }) {
   const pathname = usePathname();
