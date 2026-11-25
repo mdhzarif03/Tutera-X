@@ -3,13 +3,19 @@
 // It never caches pages or API responses that carry personal data, so signed-in content is
 // always fetched fresh from the server.
 
-const CACHE = "tutera-x-v1";
+const CACHE = "tutera-x-v2";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/favicon.svg"];
 
+// Each asset is added on its own. One failed download must not stop the worker from installing,
+// because a worker that fails to install makes the app impossible to install to the home screen.
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await Promise.all(PRECACHE.map((url) => cache.add(url).catch(() => {})));
+      await self.skipWaiting();
+    })()
   );
 });
 

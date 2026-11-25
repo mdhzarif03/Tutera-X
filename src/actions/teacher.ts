@@ -92,6 +92,15 @@ export async function createBatchAction(formData: FormData): Promise<void> {
   });
 }
 
+/** Same as createBatchAction, but errors return to the New batch screen rather than the list. */
+export async function createBatchPageAction(formData: FormData): Promise<void> {
+  const t = await teacher();
+  return runAction("/teacher/batches/new", async () => {
+    const id = await batches.createBatch(t.id, fields(formData));
+    return { message: "Batch created.", redirectTo: `/teacher/batches/${id}` };
+  });
+}
+
 export async function updateBatchAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const batchId = requireId(str(formData, "batchId"), "Batch");
