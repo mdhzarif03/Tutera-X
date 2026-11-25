@@ -20,11 +20,11 @@ export default async function BatchesPage({ searchParams }: { searchParams: Prom
         description="Groups of students who learn together."
         actions={
           <>
-            <Link href="/teacher/exports" className="btn btn-secondary gap-2">
+            <Link href="/exports" className="btn btn-secondary gap-2">
               <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
               Export to Excel
             </Link>
-            <Link href="/teacher/batches/new" className="btn btn-primary gap-2">
+            <Link href="/batches/new" className="btn btn-primary gap-2">
               <Plus className="h-4 w-4" aria-hidden="true" />
               New batch
             </Link>
@@ -37,7 +37,7 @@ export default async function BatchesPage({ searchParams }: { searchParams: Prom
         title="Active batches"
         description={q ? `${active.length} match${active.length === 1 ? "" : "es"} for “${q}”` : `${active.length} batch${active.length === 1 ? "" : "es"}`}
         actions={
-          <form method="get" action="/teacher/batches" role="search" className="flex w-full items-center gap-2 sm:w-auto">
+          <form method="get" action="/batches" role="search" className="flex w-full items-center gap-2 sm:w-auto">
             <div className="relative flex-1 sm:w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
               <input
@@ -51,7 +51,7 @@ export default async function BatchesPage({ searchParams }: { searchParams: Prom
               />
             </div>
             <button className="btn btn-secondary btn-sm" type="submit">Search</button>
-            {q ? <Link className="btn btn-secondary btn-sm" href="/teacher/batches">Clear</Link> : null}
+            {q ? <Link className="btn btn-secondary btn-sm" href="/batches">Clear</Link> : null}
           </form>
         }
       >
@@ -67,7 +67,7 @@ export default async function BatchesPage({ searchParams }: { searchParams: Prom
               <li key={b.id} className="card card-interactive relative flex flex-col gap-4 p-4">
                 <div className="min-w-0">
                   <h3 className="truncate text-base font-semibold text-slate-900">
-                    <Link href={`/teacher/batches/${b.id}`} className="after:absolute after:inset-0 after:content-[''] hover:underline">
+                    <Link href={`/batches/${b.id}`} className="after:absolute after:inset-0 after:content-[''] hover:underline">
                       {b.name}
                     </Link>
                   </h3>
@@ -111,7 +111,7 @@ export default async function BatchesPage({ searchParams }: { searchParams: Prom
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Archived</p>
             <ul className="flex flex-wrap gap-2">
               {archived.map((b) => (
-                <li key={b.id}><Link href={`/teacher/batches/${b.id}`}><Badge>{b.name}</Badge></Link></li>
+                <li key={b.id}><Link href={`/batches/${b.id}`}><Badge>{b.name}</Badge></Link></li>
               ))}
             </ul>
           </div>

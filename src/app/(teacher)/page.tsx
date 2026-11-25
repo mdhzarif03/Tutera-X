@@ -54,18 +54,18 @@ export default async function TeacherOverview() {
   const attention: { tone: Tone; text: string; href: string; cta: string }[] = [];
   const left = shortMessagesLeft(o.sms.credits);
   if (o.sms.credits !== null && o.sms.credits <= 0 && o.sms.status === "ok") {
-    attention.push({ tone: "rose", text: "The message balance is empty, so parent texts cannot be sent. Top up at nishchit.tech.", href: "/teacher/sms", cta: "See balance" });
+    attention.push({ tone: "rose", text: "The message balance is empty, so parent texts cannot be sent. Top up at nishchit.tech.", href: "/sms", cta: "See balance" });
   } else if (left !== null && left > 0 && left < 50) {
-    attention.push({ tone: "amber", text: `Only about ${left} short messages are left. Top up soon.`, href: "/teacher/sms", cta: "See balance" });
+    attention.push({ tone: "amber", text: `Only about ${left} short messages are left. Top up soon.`, href: "/sms", cta: "See balance" });
   }
   if (o.outstanding > 0) {
-    attention.push({ tone: "amber", text: `${formatTaka(o.outstanding)} is still to collect from students.`, href: "/teacher/payments", cta: "Record payments" });
+    attention.push({ tone: "amber", text: `${formatTaka(o.outstanding)} is still to collect from students.`, href: "/payments", cta: "Record payments" });
   }
   if (failed > 0) {
-    attention.push({ tone: "rose", text: `${failed} message${failed === 1 ? " could" : "s could"} not be sent.`, href: "/teacher/sms", cta: "See messages" });
+    attention.push({ tone: "rose", text: `${failed} message${failed === 1 ? " could" : "s could"} not be sent.`, href: "/sms", cta: "See messages" });
   }
   if (o.upcomingExams.length > 0 && o.activeStudents > 0) {
-    attention.push({ tone: "sky", text: `${o.upcomingExams.length} exam${o.upcomingExams.length === 1 ? "" : "s"} coming up in the next two weeks.`, href: "/teacher/exams", cta: "View exams" });
+    attention.push({ tone: "sky", text: `${o.upcomingExams.length} exam${o.upcomingExams.length === 1 ? "" : "s"} coming up in the next two weeks.`, href: "/exams", cta: "View exams" });
   }
 
   return (
@@ -85,11 +85,11 @@ export default async function TeacherOverview() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5">
-          <Link href="/teacher/attendance" className="btn btn-primary">
+          <Link href="/attendance" className="btn btn-primary">
             <CalendarCheck className="h-4 w-4" aria-hidden="true" />
             Take attendance
           </Link>
-          <Link href="/teacher/students/new" className="btn btn-secondary">
+          <Link href="/students/new" className="btn btn-secondary">
             <Plus className="h-4 w-4" aria-hidden="true" />
             Add student
           </Link>
@@ -123,13 +123,13 @@ export default async function TeacherOverview() {
               <h2 className="text-base font-semibold text-slate-900">Upcoming exams</h2>
               <p className="text-sm text-slate-500">Next two weeks</p>
             </div>
-            <Link href="/teacher/exams" className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+            <Link href="/exams" className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
               All exams <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           </div>
           {o.upcomingExams.length === 0 ? (
             <EmptyState title="No exams coming up" body="When you add an exam, students get a text straight away." icon={<GraduationCap className="h-6 w-6" aria-hidden="true" />}>
-              <Link className="btn btn-primary btn-sm" href="/teacher/exams">
+              <Link className="btn btn-primary btn-sm" href="/exams">
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Add an exam
               </Link>
@@ -140,7 +140,7 @@ export default async function TeacherOverview() {
                 const [day, month] = formatDay(e.examDate).split(" ");
                 return (
                   <li key={e.id}>
-                    <Link href={`/teacher/exams/${e.id}`} className="group flex items-center gap-4 py-4 transition hover:bg-slate-50/70">
+                    <Link href={`/exams/${e.id}`} className="group flex items-center gap-4 py-4 transition hover:bg-slate-50/70">
                       <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-indigo-50 text-center ring-1 ring-inset ring-indigo-100">
                         <span>
                           <span className="block text-lg font-bold leading-none text-indigo-700">{day}</span>
@@ -197,7 +197,7 @@ export default async function TeacherOverview() {
               <h2 className="text-base font-semibold text-slate-900">Collections by month</h2>
               <p className="text-sm text-slate-500">Money received, last 12 months</p>
             </div>
-            <Link href="/teacher/payments" className="shrink-0 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+            <Link href="/payments" className="shrink-0 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
               Open payments
             </Link>
           </div>
@@ -217,7 +217,7 @@ export default async function TeacherOverview() {
         <div className="card p-6">
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-base font-semibold text-slate-900">Recent messages</h2>
-            <Link href="/teacher/sms" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+            <Link href="/sms" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
               Open messages
             </Link>
           </div>

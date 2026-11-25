@@ -20,6 +20,12 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
         </span>
         <h1 className="mt-5 text-lg font-bold text-slate-900">Something did not load</h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">Nothing you saved has been changed. Try again, or return to your home page.</p>
+        {process.env.NODE_ENV === "development" ? (
+          // Development only: shows the real error so it can be fixed. Production never shows it.
+          <pre className="mt-4 max-h-40 overflow-auto rounded-xl bg-slate-50 p-3 text-left text-xs leading-relaxed text-rose-700 ring-1 ring-inset ring-slate-200">
+            {error.message}
+          </pre>
+        ) : null}
         <div className="mt-6 flex justify-center gap-3">
           <button type="button" onClick={() => reset()} className="btn btn-primary">
             <RotateCcw className="h-4 w-4" aria-hidden="true" />

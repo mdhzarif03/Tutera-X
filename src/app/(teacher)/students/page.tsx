@@ -106,7 +106,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
               {initials}
             </span>
             <div className="min-w-0">
-              <Link href={`/teacher/students/${s.userId}`} className="font-semibold text-slate-900 hover:text-indigo-600">
+              <Link href={`/students/${s.userId}`} className="font-semibold text-slate-900 hover:text-indigo-600">
                 {s.user.name}
               </Link>
               <p className="font-mono text-xs text-slate-500">{s.user.username}</p>
@@ -156,7 +156,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
         title={archived ? "Archived students" : "Students"}
         description="Find someone by name, login ID or guardian phone. Filter by batch, class or version, and sort to see them grouped."
         actions={
-          <Link href="/teacher/students/new" className="btn btn-primary">
+          <Link href="/students/new" className="btn btn-primary">
             <UserPlus className="h-4 w-4" aria-hidden="true" />
             Add student
           </Link>
@@ -177,18 +177,18 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
             </button>
           </form>
           <div className="flex flex-wrap items-center gap-2">
-            <FilterPanel basePath="/teacher/students" groups={groups} keep={keep} />
+            <FilterPanel basePath="/students" groups={groups} keep={keep} />
             <QuerySelect paramKey="sort" label="Sort by" value={sort} options={[...SORTS]} defaultValue="name" />
           </div>
           <Link
-            href={archived ? "/teacher/students" : "/teacher/students?archived=1"}
+            href={archived ? "/students" : "/students?archived=1"}
             className="inline-flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
           >
             <Archive className="h-4 w-4" aria-hidden="true" />
             {archived ? "Show active students" : "Show archived students"}
           </Link>
         </div>
-        <ActiveFilters basePath="/teacher/students" groups={groups} keep={keep} shown={rows.length} total={all.length} />
+        <ActiveFilters basePath="/students" groups={groups} keep={keep} shown={rows.length} total={all.length} />
       </div>
 
       {all.length === 0 ? (
@@ -198,7 +198,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
           icon={<Users className="h-6 w-6" aria-hidden="true" />}
         >
           {!archived && !q ? (
-            <Link className="btn btn-primary btn-sm" href="/teacher/students/new">
+            <Link className="btn btn-primary btn-sm" href="/students/new">
               <UserPlus className="h-4 w-4" aria-hidden="true" />
               Add the first student
             </Link>
@@ -206,7 +206,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
         </EmptyState>
       ) : noneMatch ? (
         <EmptyState title="No students match these filters" body="Remove a filter, or use Clear all to see everyone.">
-          <Link className="btn btn-secondary btn-sm" href={hrefWith("/teacher/students", keep)}>
+          <Link className="btn btn-secondary btn-sm" href={hrefWith("/students", keep)}>
             Clear filters
           </Link>
         </EmptyState>

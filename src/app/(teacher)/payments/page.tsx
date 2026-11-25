@@ -100,7 +100,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
     return (
       <tr key={`${sort}-${r.studentId}`}>
         <td>
-          <a href={`/teacher/students/${r.studentId}`} className="font-semibold text-slate-900 hover:text-indigo-600">
+          <a href={`/students/${r.studentId}`} className="font-semibold text-slate-900 hover:text-indigo-600">
             {r.name}
           </a>
           <p className="text-xs text-slate-500">
@@ -192,20 +192,20 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
           <div className="mb-4 space-y-3">
             <div className="card flex flex-wrap items-center gap-2 p-2.5">
               <div className="flex flex-wrap items-center gap-2">
-                <FilterPanel basePath="/teacher/payments" groups={groups} keep={keep} />
+                <FilterPanel basePath="/payments" groups={groups} keep={keep} />
                 <QuerySelect paramKey="sort" label="Sort by" value={sort} options={[...SORTS]} defaultValue="name" />
               </div>
-              <Link href="/teacher/exports" className="btn btn-secondary ml-auto">
+              <Link href="/exports" className="btn btn-secondary ml-auto">
                 <Download className="h-4 w-4" aria-hidden="true" />
                 Export to Excel
               </Link>
             </div>
-            <ActiveFilters basePath="/teacher/payments" groups={groups} keep={keep} shown={rows.length} total={all.length} />
+            <ActiveFilters basePath="/payments" groups={groups} keep={keep} shown={rows.length} total={all.length} />
           </div>
 
           {noneMatch ? (
             <EmptyState title="No students match these filters" body="Remove a filter, or use Clear all to see everyone.">
-              <Link className="btn btn-secondary btn-sm" href="/teacher/payments">
+              <Link className="btn btn-secondary btn-sm" href="/payments">
                 Clear filters
               </Link>
             </EmptyState>

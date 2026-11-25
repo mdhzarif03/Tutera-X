@@ -51,7 +51,7 @@ export default async function NewStudentPage({ searchParams }: { searchParams: P
           </div>
           <div className="flex items-center gap-3 sm:col-span-2">
             <button type="submit" className="btn btn-primary">Save and send welcome link</button>
-            <Link href="/teacher/students" className="text-sm text-slate-600 hover:underline">Cancel</Link>
+            <Link href="/students" className="text-sm text-slate-600 hover:underline">Cancel</Link>
           </div>
         </form>
       </Card>

@@ -119,7 +119,7 @@ export async function acceptInviteAction(formData: FormData): Promise<void> {
   if (userId) {
     await clearInviteCookie();
     await createSession(userId);
-    redirect("/teacher");
+    redirect("/");
   }
   if (error && TOKEN_GONE.test(error)) await clearInviteCookie();
   redirect(`/accept-invite?error=${encodeURIComponent(error ?? "Could not accept the invitation.")}`);

@@ -50,7 +50,7 @@ export default async function BatchPage({
         description={`${batch.className}${batch.subject ? ` · ${batch.subject}` : ""} · ${batch.members.length} student${batch.members.length === 1 ? "" : "s"}`}
         actions={
           <>
-            <Link className="btn btn-secondary" href={`/teacher/attendance?batch=${batch.id}`}>Take attendance</Link>
+            <Link className="btn btn-secondary" href={`/attendance?batch=${batch.id}`}>Take attendance</Link>
             {archived ? <Badge>archived</Badge> : null}
           </>
         }
@@ -69,7 +69,7 @@ export default async function BatchPage({
                   <tbody>
                     {batch.members.map((m) => (
                       <tr key={m.studentId}>
-                        <td><Link href={`/teacher/students/${m.studentId}`} className="font-medium text-slate-900 hover:underline">{m.student.user.name}</Link><p className="text-xs text-slate-500">{m.student.user.username}</p></td>
+                        <td><Link href={`/students/${m.studentId}`} className="font-medium text-slate-900 hover:underline">{m.student.user.name}</Link><p className="text-xs text-slate-500">{m.student.user.username}</p></td>
                         <td>{m.student.guardian.phoneE164}</td>
                         <td className="text-right">
                           <ConfirmAction
@@ -145,7 +145,7 @@ export default async function BatchPage({
               </form>
             )}
             <p className="mt-4 text-xs text-slate-500">
-              To add a new student, <Link href="/teacher/students/new" className="text-teal-700 hover:underline">create them</Link> and choose this batch.
+              To add a new student, <Link href="/students/new" className="text-teal-700 hover:underline">create them</Link> and choose this batch.
             </p>
           </Card>
 

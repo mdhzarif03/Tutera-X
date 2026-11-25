@@ -18,7 +18,7 @@ export default async function NewBatchPage({
   return (
     <>
       <Link
-        href="/teacher/batches"
+        href="/batches"
         className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -57,7 +57,7 @@ export default async function NewBatchPage({
             </Field>
 
             <div className="mt-2 grid gap-2 sm:flex sm:justify-end">
-              <Link href="/teacher/batches" className="btn btn-secondary">
+              <Link href="/batches" className="btn btn-secondary">
                 Cancel
               </Link>
               <button type="submit" className="btn btn-primary">

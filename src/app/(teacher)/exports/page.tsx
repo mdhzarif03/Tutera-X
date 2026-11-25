@@ -22,7 +22,7 @@ export default async function ExportsPage({ searchParams }: { searchParams: Prom
       {batches.length === 0 ? (
         <EmptyState title="No batches to export" body="Create a batch and add students to it. Then their records can be exported here." icon={<FileSpreadsheet className="h-6 w-6" aria-hidden="true" />} />
       ) : (
-        <form action="/teacher/exports/download" method="get" className="grid max-w-2xl gap-6">
+        <form action="/exports/download" method="get" className="grid max-w-2xl gap-6">
           <Card title="What to export">
             <div className="grid gap-3">
               <label className="flex cursor-pointer items-start gap-3 rounded-2xl p-4 ring-1 ring-inset ring-slate-200">

@@ -23,6 +23,6 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     const message = err instanceof UserError ? err.message : "Could not create the export. Please try again.";
     if (!(err instanceof UserError)) logUnexpectedError("[export] failed", { operation: "export" }, err);
-    return NextResponse.redirect(new URL(`/teacher/exports?error=${encodeURIComponent(message)}`, req.url));
+    return NextResponse.redirect(new URL(`/exports?error=${encodeURIComponent(message)}`, req.url));
   }
 }

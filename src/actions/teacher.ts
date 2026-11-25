@@ -29,12 +29,12 @@ async function teacher() {
 export async function createStudentAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const requestId = requestIdFromHeaders(await headers());
-  return runAction("/teacher/students/new", async () => {
+  return runAction("/students/new", async () => {
     const input = students.parseStudentInput(fields(formData));
     const r = await students.createStudent(t.id, input, requestId);
     return {
       message: `Student added. Login ID: ${r.username}. Activation SMS queued.`,
-      redirectTo: `/teacher/students/${r.studentId}`,
+      redirectTo: `/students/${r.studentId}`,
     };
   }, {
     operation: "student.create",
@@ -46,7 +46,7 @@ export async function createStudentAction(formData: FormData): Promise<void> {
 export async function updateStudentAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const studentId = requireId(str(formData, "studentId"), "Student");
-  return runAction(`/teacher/students/${studentId}`, async () => {
+  return runAction(`/students/${studentId}`, async () => {
     const input = students.parseStudentInput({ ...fields(formData), batchId: "" });
     await students.updateStudent(t.id, studentId, input);
     return { message: "Student details saved." };
@@ -57,7 +57,7 @@ export async function setStudentArchivedAction(formData: FormData): Promise<void
   const t = await teacher();
   const studentId = requireId(str(formData, "studentId"), "Student");
   const archived = str(formData, "archived") === "1";
-  return runAction(`/teacher/students/${studentId}`, async () => {
+  return runAction(`/students/${studentId}`, async () => {
     await students.setStudentArchived(t.id, studentId, archived);
     return { message: archived ? "Student archived. Their history is kept." : "Student restored." };
   });
@@ -66,7 +66,7 @@ export async function setStudentArchivedAction(formData: FormData): Promise<void
 export async function resendActivationAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const studentId = requireId(str(formData, "studentId"), "Student");
-  return runAction(`/teacher/students/${studentId}`, async () => {
+  return runAction(`/students/${studentId}`, async () => {
     await students.resendActivation(t.id, studentId);
     return { message: "A new welcome link has been sent. The old one no longer works." };
   });
@@ -76,7 +76,7 @@ export async function resendActivationAction(formData: FormData): Promise<void> 
 export async function addAdjustmentAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const studentId = requireId(str(formData, "studentId"), "Student");
-  return runAction(`/teacher/students/${studentId}`, async () => {
+  return runAction(`/students/${studentId}`, async () => {
     await payments.addAdjustment(t.id, studentId, fields(formData));
     return { message: "Change saved." };
   });
@@ -86,25 +86,25 @@ export async function addAdjustmentAction(formData: FormData): Promise<void> {
 
 export async function createBatchAction(formData: FormData): Promise<void> {
   const t = await teacher();
-  return runAction("/teacher/batches", async () => {
+  return runAction("/batches", async () => {
     const id = await batches.createBatch(t.id, fields(formData));
-    return { message: "Batch created.", redirectTo: `/teacher/batches/${id}` };
+    return { message: "Batch created.", redirectTo: `/batches/${id}` };
   });
 }
 
 /** Same as createBatchAction, but errors return to the New batch screen rather than the list. */
 export async function createBatchPageAction(formData: FormData): Promise<void> {
   const t = await teacher();
-  return runAction("/teacher/batches/new", async () => {
+  return runAction("/batches/new", async () => {
     const id = await batches.createBatch(t.id, fields(formData));
-    return { message: "Batch created.", redirectTo: `/teacher/batches/${id}` };
+    return { message: "Batch created.", redirectTo: `/batches/${id}` };
   });
 }
 
 export async function updateBatchAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const batchId = requireId(str(formData, "batchId"), "Batch");
-  return runAction(`/teacher/batches/${batchId}`, async () => {
+  return runAction(`/batches/${batchId}`, async () => {
     await batches.updateBatch(t.id, batchId, fields(formData));
     return { message: "Batch updated." };
   });
@@ -113,7 +113,7 @@ export async function updateBatchAction(formData: FormData): Promise<void> {
 export async function setBatchWhatsappLinkAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const batchId = requireId(str(formData, "batchId"), "Batch");
-  return runAction(`/teacher/batches/${batchId}`, async () => {
+  return runAction(`/batches/${batchId}`, async () => {
     const isSet = await batches.setBatchWhatsappLink(t.id, batchId, fields(formData));
     return { message: isSet ? "WhatsApp group link saved. Students in this batch can now see it." : "WhatsApp group link removed." };
   });
@@ -123,7 +123,7 @@ export async function setBatchArchivedAction(formData: FormData): Promise<void> 
   const t = await teacher();
   const batchId = requireId(str(formData, "batchId"), "Batch");
   const archived = str(formData, "archived") === "1";
-  return runAction(`/teacher/batches/${batchId}`, async () => {
+  return runAction(`/batches/${batchId}`, async () => {
     await batches.setBatchArchived(t.id, batchId, archived);
     return { message: archived ? "Batch archived." : "Batch restored." };
   });
@@ -132,7 +132,7 @@ export async function setBatchArchivedAction(formData: FormData): Promise<void> 
 export async function addStudentsToBatchAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const batchId = requireId(str(formData, "batchId"), "Batch");
-  return runAction(`/teacher/batches/${batchId}`, async () => {
+  return runAction(`/batches/${batchId}`, async () => {
     const added = await batches.addStudentsToBatch(t.id, batchId, strs(formData, "studentIds"));
     return { message: `${added} student${added === 1 ? "" : "s"} added to the batch.` };
   });
@@ -142,7 +142,7 @@ export async function removeFromBatchAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const batchId = requireId(str(formData, "batchId"), "Batch");
   const studentId = requireId(str(formData, "studentId"), "Student");
-  return runAction(`/teacher/batches/${batchId}`, async () => {
+  return runAction(`/batches/${batchId}`, async () => {
     await batches.removeStudentFromBatch(t.id, batchId, studentId);
     return { message: "Student removed from the batch. Their history is kept." };
   });
@@ -151,7 +151,7 @@ export async function removeFromBatchAction(formData: FormData): Promise<void> {
 export async function addScheduleAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const batchId = requireId(str(formData, "batchId"), "Batch");
-  return runAction(`/teacher/batches/${batchId}`, async () => {
+  return runAction(`/batches/${batchId}`, async () => {
     await batches.addSchedule(t.id, batchId, fields(formData));
     return { message: "Class time added." };
   });
@@ -161,7 +161,7 @@ export async function removeScheduleAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const batchId = requireId(str(formData, "batchId"), "Batch");
   const scheduleId = requireId(str(formData, "scheduleId"), "Schedule");
-  return runAction(`/teacher/batches/${batchId}`, async () => {
+  return runAction(`/batches/${batchId}`, async () => {
     await batches.removeSchedule(t.id, batchId, scheduleId);
     return { message: "Class time removed." };
   });
@@ -170,7 +170,7 @@ export async function removeScheduleAction(formData: FormData): Promise<void> {
 // ---- Attendance ----
 
 function attendancePath(batchId: string, date: string): string {
-  return `/teacher/attendance?batch=${encodeURIComponent(batchId)}&date=${encodeURIComponent(date)}`;
+  return `/attendance?batch=${encodeURIComponent(batchId)}&date=${encodeURIComponent(date)}`;
 }
 
 export async function saveAttendanceAction(formData: FormData): Promise<void> {
@@ -208,18 +208,18 @@ export async function markAllPresentAction(formData: FormData): Promise<void> {
 
 export async function createExamAction(formData: FormData): Promise<void> {
   const t = await teacher();
-  return runAction("/teacher/exams", async () => {
+  return runAction("/exams", async () => {
     const batchIds = strs(formData, "batchIds");
     const input = exams.parseExamInput(fields(formData), batchIds);
     const id = await exams.createExam(t.id, input);
-    return { message: "Exam scheduled. Students are being told.", redirectTo: `/teacher/exams/${id}` };
+    return { message: "Exam scheduled. Students are being told.", redirectTo: `/exams/${id}` };
   });
 }
 
 export async function saveMarksAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const examId = requireId(str(formData, "examId"), "Exam");
-  return runAction(`/teacher/exams/${examId}`, async () => {
+  return runAction(`/exams/${examId}`, async () => {
     const marks = fieldsWithPrefix(formData, "m_");
     const absent = new Set(strs(formData, "absent"));
     const ids = new Set([...Object.keys(marks), ...absent]);
@@ -239,7 +239,7 @@ export async function saveMarksAction(formData: FormData): Promise<void> {
 export async function publishResultsAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const examId = requireId(str(formData, "examId"), "Exam");
-  return runAction(`/teacher/exams/${examId}`, async () => {
+  return runAction(`/exams/${examId}`, async () => {
     const r = await exams.publishResults(t.id, examId);
     return { message: `Published ${r.published} result${r.published === 1 ? "" : "s"}. ${r.noticesQueued} guardian notice${r.noticesQueued === 1 ? "" : "s"} queued.` };
   });
@@ -249,7 +249,7 @@ export async function publishResultsAction(formData: FormData): Promise<void> {
 
 export async function generateChargesAction(formData: FormData): Promise<void> {
   const t = await teacher();
-  return runAction("/teacher/payments", async () => {
+  return runAction("/payments", async () => {
     const period = requireText(str(formData, "period"), "Month", 7);
     const count = await payments.generateCharges(t.id, period);
     return { message: `${count} new charge${count === 1 ? "" : "s"} created for ${period}. Existing charges were left unchanged.` };
@@ -259,7 +259,7 @@ export async function generateChargesAction(formData: FormData): Promise<void> {
 export async function recordPaymentAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const studentId = requireId(str(formData, "studentId"), "Student");
-  return runAction("/teacher/payments", async () => {
+  return runAction("/payments", async () => {
     await payments.recordPayment(t.id, studentId, { ...fields(formData), method: str(formData, "method") as PaymentMethod });
     return { message: "Payment recorded." };
   });
@@ -269,7 +269,7 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
 
 export async function sendMessageAction(formData: FormData): Promise<void> {
   const t = await teacher();
-  return runAction("/teacher/sms", async () => {
+  return runAction("/sms", async () => {
     const kind = str(formData, "target");
     const target: comms.Target =
       kind === "all"
@@ -287,7 +287,7 @@ export async function sendMessageAction(formData: FormData): Promise<void> {
 
 export async function refreshBalanceAction(): Promise<void> {
   await teacher();
-  return runAction("/teacher/sms", async () => {
+  return runAction("/sms", async () => {
     if (providerMode() === "unconfigured") throw new UserError("Messages aren't set up on this server yet.");
     const b = await refreshSmsBalance();
     if (b.status !== "ok") throw new UserError("We couldn't reach the messaging service. The last known balance is shown.");
@@ -298,7 +298,7 @@ export async function refreshBalanceAction(): Promise<void> {
 export async function toggleAbsenceSmsAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const enabled = str(formData, "enabled") === "1";
-  return runAction("/teacher/sms", async () => {
+  return runAction("/sms", async () => {
     await db.$transaction(async (tx) => {
       await tx.teacherProfile.update({ where: { userId: t.id }, data: { absenceSmsEnabled: enabled } });
       await audit(tx, { actorId: t.id, action: "settings.absence_sms", entityType: "teacher", entityId: t.id, changes: { enabled } });
@@ -311,7 +311,7 @@ export async function toggleAbsenceSmsAction(formData: FormData): Promise<void> 
 
 export async function inviteTeacherAction(formData: FormData): Promise<void> {
   const t = await teacher();
-  return runAction("/teacher/teachers", async () => {
+  return runAction("/teachers", async () => {
     await teachers.inviteTeacher(t.id, str(formData, "phone"));
     return { message: "Invitation link queued by SMS. It works once and expires in three days." };
   });
@@ -320,7 +320,7 @@ export async function inviteTeacherAction(formData: FormData): Promise<void> {
 export async function revokeInvitationAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const id = requireId(str(formData, "invitationId"), "Invitation");
-  return runAction("/teacher/teachers", async () => {
+  return runAction("/teachers", async () => {
     await teachers.revokeInvitation(t.id, id);
     return { message: "Invitation revoked." };
   });
@@ -330,7 +330,7 @@ export async function setTeacherActiveAction(formData: FormData): Promise<void> 
   const t = await teacher();
   const targetId = requireId(str(formData, "teacherId"), "Teacher");
   const active = str(formData, "active") === "1";
-  return runAction("/teacher/teachers", async () => {
+  return runAction("/teachers", async () => {
     await teachers.setTeacherActive(t.id, targetId, active);
     return { message: active ? "Teacher's access turned on." : "Teacher's access turned off." };
   });
@@ -339,7 +339,7 @@ export async function setTeacherActiveAction(formData: FormData): Promise<void> 
 
 export async function checkSendCostAction(formData: FormData): Promise<void> {
   const t = await teacher();
-  return runAction("/teacher/sms", async () => {
+  return runAction("/sms", async () => {
     const kind = str(formData, "target");
     const target: comms.Target =
       kind === "all"
@@ -359,16 +359,16 @@ export async function checkSendCostAction(formData: FormData): Promise<void> {
 export async function deleteStudentAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const studentId = requireId(str(formData, "studentId"), "Student");
-  return runAction("/teacher/students", async () => {
+  return runAction("/students", async () => {
     const message = await students.deleteStudent(t.id, studentId);
-    return { message, redirectTo: "/teacher/students" };
+    return { message, redirectTo: "/students" };
   });
 }
 
 export async function sendTeacherResetCodeAction(formData: FormData): Promise<void> {
   const t = await teacher();
   const targetId = requireId(str(formData, "teacherId"), "Teacher");
-  return runAction("/teacher/teachers", async () => {
+  return runAction("/teachers", async () => {
     await sendTeacherPasswordResetCode(t.id, targetId);
     return { message: "A password verification code has been queued by SMS. The teacher can enter it on the Forgot password page." };
   });

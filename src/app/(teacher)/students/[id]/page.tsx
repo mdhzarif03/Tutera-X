@@ -200,7 +200,7 @@ export default async function StudentPage({
               <ul className="space-y-2 text-sm">
                 {memberships.map((m) => (
                   <li key={m.batch.id} className="flex items-center justify-between">
-                    <Link href={`/teacher/batches/${m.batch.id}`} className="font-medium text-slate-900 hover:underline">{m.batch.name}</Link>
+                    <Link href={`/batches/${m.batch.id}`} className="font-medium text-slate-900 hover:underline">{m.batch.name}</Link>
                     {m.leftAt ? <Badge>left {formatDay(m.leftAt)}</Badge> : <Badge tone="good">Current</Badge>}
                   </li>
                 ))}

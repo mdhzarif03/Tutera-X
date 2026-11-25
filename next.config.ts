@@ -4,6 +4,13 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@node-rs/argon2", "@prisma/client"],
   poweredByHeader: false,
   reactStrictMode: true,
+  // Teacher pages used to live under /teacher. Old links, bookmarks and home-screen shortcuts still open.
+  async redirects() {
+    return [
+      { source: "/teacher", destination: "/", permanent: false },
+      { source: "/teacher/:path*", destination: "/:path*", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

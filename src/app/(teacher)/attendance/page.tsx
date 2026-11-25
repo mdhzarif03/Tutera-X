@@ -57,7 +57,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
       }, {})
     : {};
   const marked = roster ? roster.rows.filter((r) => r.status).length : 0;
-  const dayHref = (d: string) => `/teacher/attendance?batch=${encodeURIComponent(batchId)}&date=${d}`;
+  const dayHref = (d: string) => `/attendance?batch=${encodeURIComponent(batchId)}&date=${d}`;
 
   return (
     <>

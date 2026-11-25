@@ -3,7 +3,7 @@ import type { Role } from "@prisma/client";
 import { getSessionUser, type SessionUser } from "./session";
 
 export function roleHome(role: Role): string {
-  if (role === "TEACHER") return "/teacher";
+  if (role === "TEACHER") return "/";
   if (role === "STUDENT") return "/student";
   return "/parent";
 }

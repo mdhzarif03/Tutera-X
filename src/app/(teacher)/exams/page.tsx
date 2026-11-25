@@ -66,7 +66,7 @@ export default async function ExamsPage({ searchParams }: { searchParams: Promis
                 <tbody>
                   {exams.map((e) => (
                     <tr key={e.id}>
-                      <td><Link href={`/teacher/exams/${e.id}`} className="font-medium text-slate-900 hover:underline">{e.name}</Link><p className="text-xs text-slate-500">{e.subject}</p></td>
+                      <td><Link href={`/exams/${e.id}`} className="font-medium text-slate-900 hover:underline">{e.name}</Link><p className="text-xs text-slate-500">{e.subject}</p></td>
                       <td className="whitespace-nowrap">{formatDay(e.examDate)} · {e.examTime}</td>
                       <td className="text-slate-600">{e.batches.map((b) => b.batch.name).join(", ")}</td>
                       <td className="text-right tabular-nums">{num(e.totalMarks)}</td>

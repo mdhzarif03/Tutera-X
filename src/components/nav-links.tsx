@@ -25,15 +25,15 @@ export interface NavItem {
 
 // Icons are chosen by destination here, because functions cannot cross from server to client components.
 const ICONS: Record<string, LucideIcon> = {
-  "/teacher": Home,
-  "/teacher/students": Users,
-  "/teacher/batches": Layers,
-  "/teacher/attendance": CalendarCheck,
-  "/teacher/exams": GraduationCap,
-  "/teacher/payments": Wallet,
-  "/teacher/sms": MessageSquare,
-  "/teacher/teachers": UserCog,
-  "/teacher/settings": Settings,
+  "/": Home,
+  "/students": Users,
+  "/batches": Layers,
+  "/attendance": CalendarCheck,
+  "/exams": GraduationCap,
+  "/payments": Wallet,
+  "/sms": MessageSquare,
+  "/teachers": UserCog,
+  "/settings": Settings,
   "/student": Home,
   "/student/attendance": CalendarCheck,
   "/student/exams": GraduationCap,
@@ -48,7 +48,7 @@ export function navIcon(href: string): LucideIcon {
   return ICONS[href] ?? Circle;
 }
 
-/** The most specific item matching the URL is active, so "/teacher" never lights up with "/teacher/students". */
+/** The most specific item matching the URL is active, so "/" never lights up with "/students". */
 export function NavLinks({ items, variant }: { items: NavItem[]; variant: "top" | "tabs" }) {
   const pathname = usePathname();
   const matches = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
