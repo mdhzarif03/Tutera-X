@@ -22,22 +22,44 @@ const GENERIC_FAILURE = "We couldn't sign you in. Check your details and try aga
 const MAX_FAILURES = 5;
 const LOCK_MINUTES = 15;
 
-/** Resolves an identifier typed by a user: email (teachers), username (students, parents), or phone. */
-export function identifierWhere(identifier: string): Prisma.UserWhereInput {
+/**
+ * Finds the account that a sign-in identifier points to. Only a login ID or a phone number is accepted.
+ * A phone number can belong to a teacher, to a parent, or to the students of one guardian.
+ * Returns null when nothing matches. Throws a UserError when several students share the number.
+ */
+export async function accountWhere(identifier: string): Promise<Prisma.UserWhereInput | null> {
   const id = identifier.trim();
-  if (!id) throw new UserError("Enter your username, phone number or email.");
-  if (id.includes("@")) return { email: id.toLowerCase() };
-  if (looksLikePhone(id)) return { phoneE164: normalizeBdPhone(id) };
-  return { username: id.toUpperCase() };
+  if (!id) throw new UserError("Enter your login ID or phone number.");
+  if (!looksLikePhone(id)) return { username: id.toUpperCase() };
+
+  const phone = normalizeBdPhone(id);
+  const teacher = await db.user.findFirst({
+    where: { phoneE164: phone, role: "TEACHER", deletedAt: null },
+    select: { id: true },
+  });
+  if (teacher) return { id: teacher.id };
+
+  const parent = await db.parentProfile.findFirst({
+    where: { guardian: { phoneE164: phone } },
+    select: { userId: true },
+  });
+  if (parent) return { id: parent.userId };
+
+  const students = await db.studentProfile.findMany({
+    where: { archivedAt: null, guardian: { phoneE164: phone } },
+    select: { userId: true },
+    take: 2,
+  });
+  if (students.length === 1 && students[0]) return { id: students[0].userId };
+  if (students.length > 1) {
+    throw new UserError("More than one student uses this number. Sign in with the login ID instead.");
+  }
+  return null;
 }
 
 export async function loginWithPassword(identifier: string, password: string): Promise<{ userId: string; role: Role }> {
-  let where: Prisma.UserWhereInput;
-  try {
-    where = identifierWhere(identifier);
-  } catch {
-    throw new UserError(GENERIC_FAILURE);
-  }
+  const where = await accountWhere(identifier);
+  if (!where) throw new UserError(GENERIC_FAILURE);
   const user = await db.user.findFirst({
     where,
     select: { id: true, role: true, status: true, passwordHash: true, failedLoginCount: true, lockedUntil: true, deletedAt: true },
@@ -137,12 +159,13 @@ async function issuePasswordResetCode(userId: string, phone: string, actorId: st
 
 /** Sends a code when the account can be safely matched and the cooldown has elapsed. */
 export async function requestPasswordReset(identifier: string): Promise<void> {
-  let where: Prisma.UserWhereInput;
+  let where: Prisma.UserWhereInput | null;
   try {
-    where = identifierWhere(identifier);
+    where = await accountWhere(identifier);
   } catch {
     return;
   }
+  if (!where) return;
   const user = await db.user.findFirst({
     where: { ...where, status: "ACTIVE", deletedAt: null },
     select: {
@@ -187,12 +210,13 @@ export async function resetPassword(identifier: string, code: string, password: 
   assertPasswordPolicy(password);
   if (!/^\d{6}$/.test(code)) throw new UserError("Enter the 6-digit code from the text message.");
 
-  let where: Prisma.UserWhereInput;
+  let where: Prisma.UserWhereInput | null;
   try {
-    where = identifierWhere(identifier);
+    where = await accountWhere(identifier);
   } catch {
     throw new UserError("The code is invalid or expired.");
   }
+  if (!where) throw new UserError("The code is invalid or expired.");
   const now = new Date();
   const user = await db.user.findFirst({
     where: { ...where, status: "ACTIVE", deletedAt: null },

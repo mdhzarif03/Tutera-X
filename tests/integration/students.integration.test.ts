@@ -145,7 +145,7 @@ async function createFixture(): Promise<Fixture> {
   const user = await db.user.create({
     data: {
       role: "TEACHER",
-      email: `teacher-${marker}@integration.invalid`,
+      phoneE164: `+88017${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`,
       name: `Integration teacher ${marker}`,
       teacherProfile: { create: { role: "OWNER" } },
     },

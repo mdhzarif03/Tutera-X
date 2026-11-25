@@ -128,9 +128,11 @@ export async function acceptInviteAction(formData: FormData): Promise<void> {
 export async function changePasswordAction(formData: FormData): Promise<void> {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  const home = roleHome(user.role);
-  return runAction(`${home}/settings`, async () => {
-    const next = str(formData, "next");
+  // Each role's settings page: teachers at /settings, students at /student/profile, parents at /parent/settings.
+  const back = user.role === "TEACHER" ? "/settings" : user.role === "STUDENT" ? "/student/profile" : "/parent/settings";
+  return runAction(back, async () => {
+    // The form field is named "password" (see NewPasswordFields).
+    const next = str(formData, "password");
     const confirm = str(formData, "confirm");
     if (next !== confirm) throw new UserError("The new passwords do not match.");
     await changePassword(user.id, next, user.sessionId);

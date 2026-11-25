@@ -8,24 +8,25 @@
 //
 // The password is read from the environment, not the command line, so it stays out of shell history.
 import { db } from "@/lib/db";
+import { normalizeBdPhone } from "@/lib/phone";
 import { hashPassword } from "@/lib/auth/password";
 
 async function main(): Promise<void> {
-  const email = (process.argv[2] ?? "").trim().toLowerCase();
+  const phone = normalizeBdPhone(process.argv[2] ?? "");
   const confirmed = process.argv.includes("--confirm");
   const password = process.env.NEW_OWNER_PASSWORD ?? "";
 
-  if (!email) throw new Error("Give the owner's email address as the first argument.");
+  if (!phone) throw new Error("Give the owner's phone address as the first argument.");
   if (!confirmed) {
-    throw new Error(`This changes the password of ${email}. Re-run with --confirm to proceed.`);
+    throw new Error(`This changes the password of ${phone}. Re-run with --confirm to proceed.`);
   }
   if (password.length < 8) throw new Error("Set NEW_OWNER_PASSWORD to a password of at least 8 characters.");
 
   const owner = await db.user.findFirst({
-    where: { email, role: "TEACHER", teacherProfile: { role: "OWNER" } },
+    where: { phoneE164: phone, role: "TEACHER", teacherProfile: { role: "OWNER" } },
     select: { id: true },
   });
-  if (!owner) throw new Error(`No owner account exists with the email ${email}.`);
+  if (!owner) throw new Error(`No owner account exists with the phone ${phone}.`);
 
   const passwordHash = await hashPassword(password);
   await db.$transaction(async (tx) => {
@@ -38,7 +39,7 @@ async function main(): Promise<void> {
       data: { actorId: owner.id, action: "owner.password_reset_cli", entityType: "user", entityId: owner.id },
     });
   });
-  console.log(`Password updated for ${email}. Other sessions were signed out. Sign in with the new password.`);
+  console.log(`Password updated for ${phone}. Other sessions were signed out. Sign in with the new password.`);
 }
 
 main()

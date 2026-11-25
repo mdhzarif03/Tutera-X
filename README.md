@@ -25,7 +25,7 @@ npx prisma migrate deploy     # applies prisma/migrations (use "migrate dev" whi
 npm run dev                   # http://localhost:3000
 ```
 
-On first start the owner account is created from `INITIAL_TEACHER_EMAIL` and `INITIAL_TEACHER_PASSWORD`. An existing account is never overwritten. Remove the password from `.env` after first sign-in.
+On first start the owner account is created from `INITIAL_TEACHER_PHONE` and `INITIAL_TEACHER_PASSWORD`. An existing account is never overwritten. Remove the password from `.env` after first sign-in.
 
 ### Fresh database
 

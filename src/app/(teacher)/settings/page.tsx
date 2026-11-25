@@ -16,7 +16,7 @@ export default async function TeacherSettings({ searchParams }: { searchParams: 
         <Card title="Account">
           <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
             <dt className="text-slate-500">Name</dt><dd className="text-slate-900">{t.name}</dd>
-            <dt className="text-slate-500">Email</dt><dd className="text-slate-900">{t.email}</dd>
+            <dt className="text-slate-500">Phone</dt><dd className="text-slate-900">{t.phoneE164 ?? "Not set"}</dd>
             <dt className="text-slate-500">Role</dt><dd className="text-slate-900">{t.teacherRole === "OWNER" ? "Owner" : "Teacher"}</dd>
           </dl>
           <p className="mt-4 text-xs text-slate-500">Profile name changes are made by the owner. Contact them if your details need updating.</p>

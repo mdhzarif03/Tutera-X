@@ -101,7 +101,7 @@ export function Stat({
         <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
         {icon ? <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 ring-inset ${t.icon}`}>{icon}</span> : null}
       </div>
-      <p className="mt-3 text-3xl font-bold tabular-nums tracking-tight text-slate-900">{value}</p>
+      <p className="mt-3 text-xl font-bold tabular-nums tracking-tight text-slate-900 min-[400px]:text-2xl sm:text-3xl">{value}</p>
       {hint ? <p className="mt-1.5 text-xs text-slate-500">{hint}</p> : null}
     </div>
   );

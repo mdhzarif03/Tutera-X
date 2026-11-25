@@ -18,8 +18,8 @@ export async function register() {
     const result = await ensureInitialTeacher();
     const meaning: Record<string, string> = {
       created: "owner account created from .env",
-      exists: "an owner account with INITIAL_TEACHER_EMAIL already exists; its password is NOT changed by .env",
-      skipped: "INITIAL_TEACHER_EMAIL or INITIAL_TEACHER_PASSWORD is empty in .env; no account was created",
+      exists: "an owner account with INITIAL_TEACHER_PHONE already exists; its password is NOT changed by .env",
+      skipped: "INITIAL_TEACHER_PHONE or INITIAL_TEACHER_PASSWORD is empty in .env; no account was created",
     };
     console.info(`[bootstrap] ${result}: ${meaning[result] ?? ""}`);
   } catch {

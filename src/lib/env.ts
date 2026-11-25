@@ -1,3 +1,4 @@
+import { looksLikePhone, normalizeBdPhone } from "./phone";
 // Validated server configuration. Parsed lazily so `next build` can run without a database.
 // Error messages name the variables that are wrong, never their values.
 
@@ -5,7 +6,7 @@ export interface Env {
   NODE_ENV: "development" | "test" | "production";
   DATABASE_URL: string;
   APP_URL: string;
-  INITIAL_TEACHER_EMAIL?: string;
+  INITIAL_TEACHER_PHONE?: string;
   INITIAL_TEACHER_PASSWORD?: string;
   INITIAL_TEACHER_NAME: string;
   NISHCHIT_API_BASE_URL: string;
@@ -41,8 +42,8 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Env
   const appUrl = pick("APP_URL") ?? "http://localhost:3000";
   if (!isUrl(appUrl)) problems.push("APP_URL (must be an http or https URL)");
 
-  const email = pick("INITIAL_TEACHER_EMAIL");
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) problems.push("INITIAL_TEACHER_EMAIL (must be an email address)");
+  const phone = pick("INITIAL_TEACHER_PHONE");
+  if (phone && !looksLikePhone(phone)) problems.push("INITIAL_TEACHER_PHONE (must be a Bangladesh mobile number, for example 01712345678)");
 
   const password = pick("INITIAL_TEACHER_PASSWORD");
   if (password && password.length < 8) problems.push("INITIAL_TEACHER_PASSWORD (at least 8 characters)");
@@ -67,7 +68,7 @@ export function parseEnv(src: Readonly<Record<string, string | undefined>>): Env
     NODE_ENV: nodeEnv as Env["NODE_ENV"],
     DATABASE_URL: databaseUrl as string,
     APP_URL: appUrl,
-    INITIAL_TEACHER_EMAIL: email,
+    INITIAL_TEACHER_PHONE: phone && looksLikePhone(phone) ? normalizeBdPhone(phone) : undefined,
     INITIAL_TEACHER_PASSWORD: password,
     INITIAL_TEACHER_NAME: pick("INITIAL_TEACHER_NAME") ?? "Main Administrator",
     NISHCHIT_API_BASE_URL: apiBase,

@@ -5,21 +5,40 @@ import { isUniqueViolation } from "@/lib/errors";
 
 /**
  * Creates the initial owner account from environment variables when it does not exist.
- * An existing account is never modified, and the password is never logged.
+ * An existing account keeps its password. If it has no phone number yet (created before phone sign-in),
+ * the phone number from .env is saved once so the owner can sign in with it.
+ * The password is never logged.
  */
 export async function ensureInitialTeacher(): Promise<"created" | "exists" | "skipped"> {
   const env = getEnv();
-  if (!env.INITIAL_TEACHER_EMAIL || !env.INITIAL_TEACHER_PASSWORD) return "skipped";
+  if (!env.INITIAL_TEACHER_PHONE || !env.INITIAL_TEACHER_PASSWORD) return "skipped";
+  const phoneE164 = env.INITIAL_TEACHER_PHONE;
 
-  const email = env.INITIAL_TEACHER_EMAIL.toLowerCase();
-  const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
-  if (existing) return "exists";
+  const owner = await db.user.findFirst({
+    where: { role: "TEACHER", teacherProfile: { role: "OWNER" }, deletedAt: null },
+    select: { id: true, phoneE164: true },
+  });
+  if (owner) {
+    if (!owner.phoneE164) {
+      try {
+        await db.user.update({ where: { id: owner.id }, data: { phoneE164 } });
+        console.info("[bootstrap] owner phone number saved from INITIAL_TEACHER_PHONE");
+      } catch (err) {
+        if (isUniqueViolation(err)) return "exists";
+        throw err;
+      }
+    }
+    return "exists";
+  }
+
+  const taken = await db.user.findUnique({ where: { phoneE164 }, select: { id: true } });
+  if (taken) return "exists";
 
   try {
     await db.user.create({
       data: {
         role: "TEACHER",
-        email,
+        phoneE164,
         name: env.INITIAL_TEACHER_NAME,
         passwordHash: await hashPassword(env.INITIAL_TEACHER_PASSWORD),
         status: "ACTIVE",

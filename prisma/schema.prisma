@@ -106,7 +106,6 @@ enum TeacherRole {
 model User {
   id                 String        @id @default(cuid())
   role               Role
-  email              String?       @unique
   // Name initials plus a globally unique random number, shared by student and parent accounts.
   username           String?       @unique
   // Normalised E.164 (+8801XXXXXXXXX). Used for login and SMS.
@@ -160,7 +159,6 @@ model TeacherProfile {
 
 model TeacherInvitation {
   id            String    @id @default(cuid())
-  email         String?
   phoneE164     String?   @unique
   tokenHash     String    @unique          // SHA-256 of the raw token; raw token is never stored
   invitedById   String
@@ -169,8 +167,6 @@ model TeacherInvitation {
   acceptedAt    DateTime?                  // single use: set once, then the token is dead
   revokedAt     DateTime?
   createdAt     DateTime  @default(now())
-
-  @@index([email])
   @@index([expiresAt])
 }
 

@@ -29,7 +29,6 @@ export async function listTeachers() {
     select: {
       id: true,
       name: true,
-      email: true,
       phoneE164: true,
       status: true,
       lastLoginAt: true,
@@ -42,7 +41,7 @@ export async function listInvitations(invitedById: string) {
   return db.teacherInvitation.findMany({
     where: { invitedById, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: "desc" },
-    select: { id: true, email: true, phoneE164: true, expiresAt: true, invitedById: true },
+    select: { id: true, phoneE164: true, expiresAt: true, invitedById: true },
   });
 }
 
@@ -67,7 +66,7 @@ export async function inviteTeacher(actorId: string, phoneRaw: string): Promise<
       const inv = previous
         ? await tx.teacherInvitation.update({
             where: { id: previous.id },
-            data: { email: null, tokenHash, invitedById: actorId, expiresAt, acceptedAt: null, revokedAt: null, createdAt: now },
+            data: { tokenHash, invitedById: actorId, expiresAt, acceptedAt: null, revokedAt: null, createdAt: now },
           })
         : await tx.teacherInvitation.create({
             data: { phoneE164, tokenHash, invitedById: actorId, expiresAt },
@@ -118,7 +117,7 @@ export async function acceptInvitation(
   if (!inv || inv.acceptedAt || inv.revokedAt || inv.expiresAt < new Date()) {
     throw new UserError("This link has expired or was already used.");
   }
-  if (!inv.email && !inv.phoneE164) throw new UserError("This invitation has no contact number.");
+  if (!inv.phoneE164) throw new UserError("This invitation has no contact number.");
   const passwordHash = await hashPassword(password);
   try {
     return await db.$transaction(async (tx) => {
@@ -131,7 +130,6 @@ export async function acceptInvitation(
       const user = await tx.user.create({
         data: {
           role: "TEACHER",
-          email: inv.email,
           phoneE164: inv.phoneE164,
           name,
           passwordHash,
@@ -151,7 +149,7 @@ export async function acceptInvitation(
     });
   } catch (err) {
     if (isUniqueViolation(err)) {
-      throw new UserError(inv.phoneE164 ? "This phone number already has an account." : "This email already has an account.");
+      throw new UserError("This phone number already has an account.");
     }
     throw err;
   }

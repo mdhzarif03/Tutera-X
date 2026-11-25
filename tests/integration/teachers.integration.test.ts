@@ -81,7 +81,7 @@ async function createTeacher(role: "OWNER" | "TEACHER"): Promise<{ id: string }>
   return db.user.create({
     data: {
       role: "TEACHER",
-      email: `team-${marker}@integration.invalid`,
+      phoneE164: `+88017${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`,
       name: `Integration ${role.toLowerCase()} ${marker}`,
       teacherProfile: { create: { role } },
     },

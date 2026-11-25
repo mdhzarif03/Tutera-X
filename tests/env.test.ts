@@ -28,14 +28,14 @@ describe("environment validation", () => {
     assert.equal(parseEnv({ ...base, NODE_ENV: "production", APP_URL: "https://tutera.example" }).APP_URL, "https://tutera.example");
   });
 
-  test("validates the initial teacher email and password length", () => {
-    assert.throws(() => parseEnv({ ...base, INITIAL_TEACHER_EMAIL: "not-an-email" }), /INITIAL_TEACHER_EMAIL/);
+  test("validates the initial teacher phone and password length", () => {
+    assert.throws(() => parseEnv({ ...base, INITIAL_TEACHER_PHONE: "12345" }), /INITIAL_TEACHER_PHONE/);
     assert.throws(() => parseEnv({ ...base, INITIAL_TEACHER_PASSWORD: "short" }), /INITIAL_TEACHER_PASSWORD/);
   });
 
   test("treats empty strings as unset", () => {
-    const env = parseEnv({ ...base, INITIAL_TEACHER_EMAIL: "", NISHCHIT_API_KEY: "" });
-    assert.equal(env.INITIAL_TEACHER_EMAIL, undefined);
+    const env = parseEnv({ ...base, INITIAL_TEACHER_PHONE: "", NISHCHIT_API_KEY: "" });
+    assert.equal(env.INITIAL_TEACHER_PHONE, undefined);
     assert.equal(env.NISHCHIT_API_KEY, undefined);
   });
 });

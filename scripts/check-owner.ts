@@ -1,15 +1,16 @@
-// Read-only. Prints the status of the owner account with the given email. Changes nothing, and never
+// Read-only. Prints the status of the owner account with the given phone. Changes nothing, and never
 // prints the password or its hash.
 //
 // Usage:  npm run owner:check -- owner@example.com
 import { db } from "@/lib/db";
+import { normalizeBdPhone } from "@/lib/phone";
 
 async function main(): Promise<void> {
-  const email = (process.argv[2] ?? "").trim().toLowerCase();
-  if (!email) throw new Error("Give the email address as the first argument.");
+  const phone = normalizeBdPhone(process.argv[2] ?? "");
+  if (!phone) throw new Error("Give the phone address as the first argument.");
 
   const user = await db.user.findUnique({
-    where: { email },
+    where: { phoneE164: phone },
     select: {
       id: true,
       role: true,
@@ -26,10 +27,10 @@ async function main(): Promise<void> {
   });
 
   if (!user) {
-    console.log(`No user has the email ${email}.`);
+    console.log(`No user has the phone ${phone}.`);
     return;
   }
-  console.log(`User found for ${email}`);
+  console.log(`User found for ${phone}`);
   console.log(`  name: ${user.name}`);
   console.log(`  role: ${user.role}, teacher role: ${user.teacherProfile?.role ?? "none"}`);
   console.log(`  status: ${user.status}${user.deletedAt ? " (deleted)" : ""}`);

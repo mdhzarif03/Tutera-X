@@ -13,7 +13,7 @@ export default async function ForgotPage({ searchParams }: { searchParams: Promi
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
       <form action={forgotAction} className="space-y-4">
         <div>
-          <label htmlFor="identifier" className="label">Login ID, phone or email</label>
+          <label htmlFor="identifier" className="label">Login ID or phone number</label>
           <input id="identifier" name="identifier" required className="input" />
         </div>
         <button type="submit" className="btn btn-primary w-full">Send verification code</button>

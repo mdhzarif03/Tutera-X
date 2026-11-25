@@ -15,7 +15,6 @@ export interface SessionUser {
   role: Role;
   name: string;
   username: string | null;
-  email: string | null;
   phoneE164: string | null;
   teacherRole: TeacherRole | null;
 }
@@ -84,7 +83,6 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     role: u.role,
     name: u.name,
     username: u.username,
-    email: u.email,
     phoneE164: u.phoneE164,
     teacherRole: u.teacherProfile?.role ?? null,
   };

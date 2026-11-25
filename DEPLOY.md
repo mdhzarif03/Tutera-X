@@ -46,7 +46,7 @@ Set these in Vercel: Project → Settings → Environment Variables, or with `ve
 | `DATABASE_URL` | Neon pooled URL (the app uses this) |
 | `DIRECT_URL` | Neon direct URL, pooling off (migrations use this) |
 | `APP_URL` | `https://<your-domain>` (must be https) |
-| `INITIAL_TEACHER_EMAIL` | owner email (only needed the first time) |
+| `INITIAL_TEACHER_PHONE` | owner phone number, e.g. 01712345678 (only needed the first time) |
 | `INITIAL_TEACHER_PASSWORD` | owner password (remove after first sign-in) |
 | `NISHCHIT_API_BASE_URL` | `https://api.nishchit.tech` |
 | `NISHCHIT_API_KEY` | `nk_test_...` first; switch to `nk_live_...` later |

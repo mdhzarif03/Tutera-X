@@ -9,12 +9,12 @@ export const metadata = { title: "New password" };
 export default async function ResetPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
   return (
-    <AuthCard title="Verify your code" description="Enter the same login ID, phone or email you used to request the code, then choose a new password.">
+    <AuthCard title="Verify your code" description="Enter the same login ID or phone number you used to request the code, then choose a new password.">
       <Flash msg={pick(sp, "msg")} />
       <Flash error={pick(sp, "error")} />
       <form action={resetAction} className="space-y-4">
         <div>
-          <label htmlFor="identifier" className="label">Login ID, phone or email</label>
+          <label htmlFor="identifier" className="label">Login ID or phone number</label>
           <input id="identifier" name="identifier" required className="input" />
         </div>
         <div>

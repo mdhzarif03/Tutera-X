@@ -64,7 +64,7 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
                     {invitations.map((i) => (
                       <li key={i.id} className="flex items-center justify-between gap-3 py-2.5">
                         <div className="min-w-0">
-                          <p className="truncate font-medium text-slate-900">{i.phoneE164 ?? i.email}</p>
+                          <p className="truncate font-medium text-slate-900">{i.phoneE164 ?? "No phone number"}</p>
                           <p className="text-xs text-slate-500">Expires {formatDateTime(i.expiresAt)}</p>
                         </div>
                         <form action={revokeInvitationAction}>
@@ -104,7 +104,7 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
                             {tc.name}
                             {isSelf ? <span className="ml-1 text-xs font-normal text-slate-500">(you)</span> : null}
                           </p>
-                          <p className="text-xs text-slate-500">{tc.phoneE164 ?? tc.email ?? "No contact number"}</p>
+                          <p className="text-xs text-slate-500">{tc.phoneE164 ?? "No contact number"}</p>
                           {tc.teacherProfile?.subjects ? <p className="mt-1 text-xs text-slate-600">Subjects: {tc.teacherProfile.subjects}</p> : null}
                           {tc.teacherProfile?.institutionName ? <p className="text-xs text-slate-500">{tc.teacherProfile.institutionName}</p> : null}
                           <div className="mt-1 flex flex-wrap gap-1.5">

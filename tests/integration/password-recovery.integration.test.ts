@@ -1,6 +1,6 @@
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { randomInt, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { configureTestDatabase, testDatabaseSkipReason, testDatabaseUrl } from "./test-database";
 
@@ -25,8 +25,8 @@ describe("PostgreSQL: password recovery and cooldowns", { skip: testDatabaseUrl 
   test("sends a single reset code, counts incorrect attempts, and resets the password", async () => {
     const user = await createUser();
     try {
-      await requestPasswordReset(user.email);
-      await Promise.all([requestPasswordReset(user.email), requestPasswordReset(user.email)]);
+      await requestPasswordReset(user.phone);
+      await Promise.all([requestPasswordReset(user.phone), requestPasswordReset(user.phone)]);
 
       const reset = await db.passwordResetToken.findFirstOrThrow({
         where: { userId: user.id },
@@ -43,7 +43,7 @@ describe("PostgreSQL: password recovery and cooldowns", { skip: testDatabaseUrl 
       assert.ok(code, "queued SMS should contain a six-digit reset code");
 
       const wrongCode = code === "000000" ? "000001" : "000000";
-      await assert.rejects(resetPassword(user.email, wrongCode, "new-password-123"), UserError);
+      await assert.rejects(resetPassword(user.phone, wrongCode, "new-password-123"), UserError);
       assert.equal((await db.passwordResetToken.findUniqueOrThrow({ where: { id: reset.id } })).attempts, 1);
 
       const session = await db.session.create({
@@ -54,12 +54,12 @@ describe("PostgreSQL: password recovery and cooldowns", { skip: testDatabaseUrl 
           expiresAt: new Date(Date.now() + 60_000),
         },
       });
-      await resetPassword(user.email, code, "new-password-123");
+      await resetPassword(user.phone, code, "new-password-123");
       const updated = await db.user.findUniqueOrThrow({ where: { id: user.id } });
       assert.equal(updated.passwordChangedAt, null);
       assert.ok(await (await import("@/lib/auth/password")).verifyPassword(updated.passwordHash!, "new-password-123"));
       assert.ok((await db.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt);
-      await requestPasswordReset(user.email);
+      await requestPasswordReset(user.phone);
       assert.equal(await db.passwordResetToken.count({ where: { userId: user.id } }), 1);
 
       const currentSession = await createSession(user.id);
@@ -91,7 +91,7 @@ describe("PostgreSQL: password recovery and cooldowns", { skip: testDatabaseUrl 
   test("a teacher without a phone cannot receive a reset SMS", async () => {
     const user = await createUser({ phoneE164: null });
     try {
-      await requestPasswordReset(user.email);
+      await requestPasswordReset(user.phone);
       assert.equal(await db.passwordResetToken.count({ where: { userId: user.id } }), 0);
       assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).passwordResetRequestedAt, null);
     } finally {
@@ -102,19 +102,18 @@ describe("PostgreSQL: password recovery and cooldowns", { skip: testDatabaseUrl 
 
 async function createUser(overrides: { phoneE164?: string | null; passwordChangedAt?: Date } = {}) {
   const marker = randomUUID();
-  const email = `password-${marker}@integration.invalid`;
+  const phone = `+88017${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`;
   const user = await db.user.create({
     data: {
       role: "TEACHER",
-      email,
-      phoneE164: overrides.phoneE164 === null ? null : overrides.phoneE164 ?? `+88017${randomInt(10_000_000, 99_999_999)}`,
+      phoneE164: overrides.phoneE164 === null ? null : overrides.phoneE164 ?? phone,
       name: `Integration teacher ${marker}`,
       passwordChangedAt: overrides.passwordChangedAt,
       teacherProfile: { create: { role: "OWNER" } },
     },
     select: { id: true },
   });
-  return { id: user.id, email };
+  return { id: user.id, phone };
 }
 
 function createSession(userId: string) {

@@ -12,11 +12,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   await ensureStartup();
   const sp = await searchParams;
   return (
-    <AuthCard title="Sign in" description="Teachers sign in with email. Students and parents use their login ID or phone number.">
+    <AuthCard title="Sign in" description="Sign in with your login ID or phone number.">
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />
       <form action={loginAction} className="space-y-4">
         <div>
-          <label htmlFor="identifier" className="label">Email, login ID or phone</label>
+          <label htmlFor="identifier" className="label">Login ID or phone number</label>
           <input id="identifier" name="identifier" required autoComplete="username" className="input" placeholder="you@example.com or initials-number" />
         </div>
         <div>
