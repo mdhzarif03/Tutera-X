@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, MessageCircle, Plus, Search, Users } from "lucide-react";
+import { CalendarClock, FileSpreadsheet, MessageCircle, Plus, Search, Users } from "lucide-react";
 import { requireRole } from "@/lib/auth/guards";
 import { listBatches } from "@/services/batches";
 import { Badge, Card, EmptyState, Flash, PageHeader } from "@/components/ui";
@@ -19,10 +19,16 @@ export default async function BatchesPage({ searchParams }: { searchParams: Prom
         title="Batches"
         description="Groups of students who learn together."
         actions={
-          <Link href="/teacher/batches/new" className="btn btn-primary gap-2">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            New batch
-          </Link>
+          <>
+            <Link href="/teacher/exports" className="btn btn-secondary gap-2">
+              <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+              Export to Excel
+            </Link>
+            <Link href="/teacher/batches/new" className="btn btn-primary gap-2">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              New batch
+            </Link>
+          </>
         }
       />
       <Flash msg={pick(sp, "msg")} error={pick(sp, "error")} />

@@ -276,8 +276,6 @@ export async function listStudents(
     db.teacherStudent.findMany({
       where,
       orderBy: { student: { user: { name: "asc" } } },
-      skip: (opts.page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
       select: {
         student: {
           select: {
@@ -302,7 +300,7 @@ export async function listStudents(
     rows,
     total,
     page: opts.page,
-    pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    pages: 1,
   };
 }
 

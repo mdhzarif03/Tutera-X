@@ -15,7 +15,8 @@ import { teacherOverview } from "@/services/dashboards";
 import { Badge, EmptyState } from "@/components/ui";
 import { formatDay, TZ } from "@/lib/dates";
 import { shortMessagesLeft } from "@/lib/sms/balance";
-import { formatTaka, num } from "@/lib/money";
+import { formatTaka } from "@/lib/money";
+import { CollectionBars } from "@/components/collection-bars";
 
 export const metadata = { title: "Overview" };
 
@@ -191,29 +192,26 @@ export default async function TeacherOverview() {
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="card p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-slate-900">Recent payments</h2>
-            <Link href="/teacher/payments" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Collections by month</h2>
+              <p className="text-sm text-slate-500">Money received, last 12 months</p>
+            </div>
+            <Link href="/teacher/payments" className="shrink-0 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
               Open payments
             </Link>
           </div>
-          {o.recentPayments.length === 0 ? (
-            <p className="text-sm text-slate-500">Payments you record appear here.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {o.recentPayments.map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{p.student.user.name}</p>
-                    <p className="text-xs capitalize text-slate-500">
-                      {formatDay(p.paidOn)} · {p.method.toLowerCase().replace("_", " ")}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-sm font-bold tabular-nums text-emerald-700">{formatTaka(num(p.amount))}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <CollectionBars items={o.collections} />
+          <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-sm">
+            <div>
+              <p className="text-xs font-medium text-slate-500">This month</p>
+              <p className="font-bold tabular-nums text-emerald-700">{formatTaka(o.collections[o.collections.length - 1]?.amount ?? 0)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-medium text-slate-500">Last 12 months</p>
+              <p className="font-bold tabular-nums text-slate-900">{formatTaka(o.collections.reduce((s, c) => s + c.amount, 0))}</p>
+            </div>
+          </div>
         </div>
 
         <div className="card p-6">

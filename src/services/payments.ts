@@ -71,8 +71,10 @@ export async function listFinance(teacherId: string) {
         select: {
           monthlyFee: true,
           className: true,
+          version: true,
           user: { select: { name: true, username: true } },
           guardian: { select: { name: true, phoneE164: true } },
+          batchMemberships: { where: { leftAt: null }, select: { batch: { select: { name: true } } } },
         },
       },
     },
@@ -83,8 +85,10 @@ export async function listFinance(teacherId: string) {
     name: l.student.user.name,
     username: l.student.user.username,
     className: l.student.className,
+    version: l.student.version,
     monthlyFee: num(l.student.monthlyFee),
     guardianName: l.student.guardian.name,
+    batches: l.student.batchMemberships.map((m) => m.batch.name),
     balance: balances.get(l.studentId) ?? null,
   }));
 }

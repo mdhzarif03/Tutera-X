@@ -1,0 +1,7 @@
+# Signing key and build output must never be committed or shared.
+android.keystore
+*.keystore
+*.jks
+*.apk
+*.aab
+*.idsig
